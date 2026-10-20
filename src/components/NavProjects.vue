@@ -1,83 +1,35 @@
 <script setup lang="ts">
-import type { LucideIcon } from "@lucide/vue"
-import {
-  Folder,
-  Forward,
-  MoreHorizontal,
-  Trash2,
-} from "@lucide/vue"
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { ExternalLink } from "@lucide/vue"
 import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from '@/components/ui/sidebar'
 
 defineProps<{
   projects: {
     name: string
     url: string
-    icon: LucideIcon
+    icon: any
   }[]
 }>()
-
-const { isMobile } = useSidebar()
 </script>
 
 <template>
   <SidebarGroup class="group-data-[collapsible=icon]:hidden">
-    <SidebarGroupLabel>Projects</SidebarGroupLabel>
+    <SidebarGroupLabel>Portals & Displays</SidebarGroupLabel>
     <SidebarMenu>
       <SidebarMenuItem v-for="item in projects" :key="item.name">
         <SidebarMenuButton as-child>
-          <a :href="item.url">
-            <component :is="item.icon" />
-            <span>{{ item.name }}</span>
+          <a :href="item.url" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <component :is="item.icon" class="size-4" />
+              <span>{{ item.name }}</span>
+            </div>
+            <ExternalLink class="size-3 text-muted-foreground opacity-70" />
           </a>
-        </SidebarMenuButton>
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <SidebarMenuAction show-on-hover>
-              <MoreHorizontal />
-              <span class="sr-only">More</span>
-            </SidebarMenuAction>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            class="w-48 rounded-lg"
-            :side="isMobile ? 'bottom' : 'right'"
-            :align="isMobile ? 'end' : 'start'"
-          >
-            <DropdownMenuItem>
-              <Folder class="text-muted-foreground" />
-              <span>View Project</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Forward class="text-muted-foreground" />
-              <span>Share Project</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Trash2 class="text-muted-foreground" />
-              <span>Delete Project</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton>
-          <MoreHorizontal />
-          <span>More</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>

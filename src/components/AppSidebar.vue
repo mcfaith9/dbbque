@@ -1,17 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SidebarProps } from '@/components/ui/sidebar'
+import { useAuthStore } from '@/stores/auth'
 
 import {
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  LifeBuoy,
-  Map,
-  PieChart,
-  Send,
-  Settings2,
-  SquareTerminal,
+  LayoutDashboard,
+  SlidersHorizontal,
+  History,
+  Users2,
+  Settings,
+  Tv,
+  Printer,
+  MonitorCheck,
+  LifeBuoy
 } from "@lucide/vue"
 
 import NavMain from '@/components/NavMain.vue'
@@ -32,129 +33,68 @@ const props = withDefaults(defineProps<SidebarProps>(), {
   variant: "inset",
 })
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+const auth = useAuthStore()
+
+const userData = computed(() => ({
+  name: auth.user?.name || "Administrator",
+  email: auth.user?.email || "admin@example.com",
+  avatar: "/favicon.svg",
+}))
+
+const navMain = [
+  {
+    title: "Queue Overview",
+    url: "/admin/queue",
+    icon: LayoutDashboard,
+    isActive: true,
   },
-  navMain: [
-    {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Support",
-      url: "#",
-      icon: LifeBuoy,
-    },
-    {
-      title: "Feedback",
-      url: "#",
-      icon: Send,
-    },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
-}
+  {
+    title: "Counters & Tables",
+    url: "/admin/counters",
+    icon: SlidersHorizontal,
+  },
+  {
+    title: "History & Logs",
+    url: "/admin/history",
+    icon: History,
+  },
+  {
+    title: "Staff Accounts",
+    url: "/admin/accounts",
+    icon: Users2,
+  },
+  {
+    title: "Queue Settings",
+    url: "/admin/settings",
+    icon: Settings,
+  },
+]
+
+const externalPortals = [
+  {
+    name: "Public Display (TV)",
+    url: "/display",
+    icon: Tv,
+  },
+  {
+    name: "Ticket Dispenser Kiosk",
+    url: "/ticket",
+    icon: Printer,
+  },
+  {
+    name: "Staff Counter Terminal",
+    url: "/counter",
+    icon: MonitorCheck,
+  },
+]
+
+const secondaryItems = [
+  {
+    title: "System Status: Online",
+    url: "#",
+    icon: LifeBuoy,
+  },
+]
 </script>
 
 <template>
@@ -163,26 +103,26 @@ const data = {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" as-child>
-            <a href="#">
-              <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Command class="size-4" />
+            <RouterLink to="/admin/queue">
+              <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-black">
+                Q
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-medium">Acme Inc</span>
-                <span class="truncate text-xs">Enterprise</span>
+                <span class="truncate font-bold tracking-tight">dbbque</span>
+                <span class="truncate text-xs text-muted-foreground">Admin Console</span>
               </div>
-            </a>
+            </RouterLink>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <NavMain :items="data.navMain" />
-      <NavProjects :projects="data.projects" />
-      <NavSecondary :items="data.navSecondary" class="mt-auto" />
+      <NavMain :items="navMain" />
+      <NavProjects :projects="externalPortals" />
+      <NavSecondary :items="secondaryItems" class="mt-auto" />
     </SidebarContent>
     <SidebarFooter>
-      <NavUser :user="data.user" />
+      <NavUser :user="userData" />
     </SidebarFooter>
   </Sidebar>
 </template>

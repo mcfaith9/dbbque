@@ -1,0 +1,7 @@
+{
+  "name": "dbbque - All-in-One Queue Management System",
+  "description": "A lightweight, real-time all-in-one queue management system supporting Ticket Machine, Counter Staff, Administrator, and Public Display interfaces with SQLite and Socket.IO.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

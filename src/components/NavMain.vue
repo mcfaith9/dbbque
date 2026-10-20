@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { LucideIcon } from "@lucide/vue"
 import { ChevronRight } from "@lucide/vue"
+import { RouterLink, useRoute } from 'vue-router'
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,7 +22,7 @@ defineProps<{
   items: {
     title: string
     url: string
-    icon: LucideIcon
+    icon: any
     isActive?: boolean
     items?: {
       title: string
@@ -30,21 +30,23 @@ defineProps<{
     }[]
   }[]
 }>()
+
+const route = useRoute()
 </script>
 
 <template>
   <SidebarGroup>
-    <SidebarGroupLabel>Platform</SidebarGroupLabel>
+    <SidebarGroupLabel>Management</SidebarGroupLabel>
     <SidebarMenu>
-      <Collapsible v-for="item in items" :key="item.title" as-child :default-open="item.isActive">
-        <SidebarMenuItem>
-          <SidebarMenuButton as-child :tooltip="item.title">
-            <a :href="item.url">
-              <component :is="item.icon" />
-              <span>{{ item.title }}</span>
-            </a>
-          </SidebarMenuButton>
-          <template v-if="item.items?.length">
+      <template v-for="item in items" :key="item.title">
+        <Collapsible v-if="item.items?.length" as-child :default-open="item.isActive">
+          <SidebarMenuItem>
+            <SidebarMenuButton as-child :tooltip="item.title">
+              <RouterLink :to="item.url">
+                <component :is="item.icon" />
+                <span>{{ item.title }}</span>
+              </RouterLink>
+            </SidebarMenuButton>
             <CollapsibleTrigger as-child>
               <SidebarMenuAction class="data-[state=open]:rotate-90">
                 <ChevronRight />
@@ -55,16 +57,29 @@ defineProps<{
               <SidebarMenuSub>
                 <SidebarMenuSubItem v-for="subItem in item.items" :key="subItem.title">
                   <SidebarMenuSubButton as-child>
-                    <a :href="subItem.url">
+                    <RouterLink :to="subItem.url">
                       <span>{{ subItem.title }}</span>
-                    </a>
+                    </RouterLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               </SidebarMenuSub>
             </CollapsibleContent>
-          </template>
+          </SidebarMenuItem>
+        </Collapsible>
+
+        <SidebarMenuItem v-else>
+          <SidebarMenuButton
+            as-child
+            :tooltip="item.title"
+            :is-active="route.path === item.url"
+          >
+            <RouterLink :to="item.url">
+              <component :is="item.icon" />
+              <span>{{ item.title }}</span>
+            </RouterLink>
+          </SidebarMenuButton>
         </SidebarMenuItem>
-      </Collapsible>
+      </template>
     </SidebarMenu>
   </SidebarGroup>
 </template>
