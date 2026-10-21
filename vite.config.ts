@@ -5,6 +5,10 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  server: {
+    host: '0.0.0.0',
+    allowedHosts: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

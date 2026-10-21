@@ -25,7 +25,8 @@ import {
   AuthUser
 } from './src/server/auth'
 
-const PORT = 3000
+const PORT = Number(process.env.PORT) || 3000
+const HOST = process.env.HOST || '0.0.0.0'
 const isProd = process.env.NODE_ENV === 'production'
 
 async function startServer() {
@@ -485,7 +486,10 @@ async function startServer() {
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite')
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true
+      },
       appType: 'spa'
     })
     app.use(vite.middlewares)
@@ -497,8 +501,8 @@ async function startServer() {
     })
   }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[dbbque] Server listening on http://0.0.0.0:${PORT}`)
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`[dbbque] Server listening on http://${HOST}:${PORT}`)
   })
 }
 
