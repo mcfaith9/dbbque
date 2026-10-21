@@ -11,7 +11,7 @@ import {
   Tv,
   WifiOff,
   Clock,
-  Users,
+  UsersRound,
   CheckCircle2,
   Layers,
   History
@@ -218,15 +218,15 @@ function unlockAndToggleSound() {
 
         <!-- Bottom Row: Equal Size Side-by-Side Panels (Waiting Queue on Left, Recently Called on Right) -->
         <!-- Both have identical height, width (50% each), card dimensions, and capacity for 6-12 records -->
-        <div class="h-44 md:h-48 shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch min-h-0">
+        <div class="h-44 md:h-48 shrink-0 grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 items-stretch min-h-0">
           <!-- Panel 1: Waiting Queue (Left, directly under Hero) -->
           <div class="rounded-2xl border border-neutral-800 bg-neutral-900/90 p-3.5 flex flex-col justify-between shadow-md min-h-0 min-w-0">
             <!-- Panel Header -->
             <div class="flex items-center justify-between pb-2 border-b border-neutral-800/80 mb-2 shrink-0">
               <div class="flex items-center gap-2 min-w-0">
-                <Users class="size-4 text-amber-400 shrink-0" />
-                <h2 class="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-200 truncate">
-                  Waiting Queue
+                <UsersRound class="size-4 text-amber-400 shrink-0" />
+                <h2 class="text-xs md:text-sm font-bold tracking-wider text-neutral-200 truncate">
+                  <span class="uppercase"> Waiting Queue</span> <span class="italic text-11">(Mga Susunod na Tatawagin)</span>
                 </h2>
                 <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0">
                   {{ queue.stats.totalWaiting }}
@@ -246,43 +246,25 @@ function unlockAndToggleSound() {
               </div>
             </div>
 
-            <!-- Cards Grid (6 to 12 capacity, 2 rows of up to 6 columns) -->
-            <div v-if="visibleWaitingTickets.length > 0" class="grid grid-cols-4 sm:grid-cols-6 gap-2 flex-1 min-h-0 items-stretch overflow-hidden">
+            <div
+              v-if="visibleWaitingTickets.length > 0"
+              class="grid grid-cols-4 grid-rows-2 gap-x-3 gap-y-2 flex-1 min-h-0 overflow-hidden"
+            >
               <div
-                v-for="(t, idx) in visibleWaitingTickets"
+                v-for="(t, idx) in visibleWaitingTickets.slice(0, 8)"
                 :key="t.id"
-                class="flex flex-col justify-between p-1.5 rounded-xl border text-center transition-all min-w-0"
-                :class="t.queue_type === 'priority'
-                  ? 'border-amber-500/40 bg-amber-500/10'
-                  : 'border-neutral-700/80 bg-neutral-800/80'"
+                class="flex items-center justify-center border-emerald-500/30 bg-neutral-800/90 rounded-3xl border px-2 py-1 min-w-0"
               >
-                <div class="flex items-center justify-between text-xs font-bold px-0.5">
-                  <span class="text-neutral-400">#{{ idx + 1 }}</span>
-                  <span :class="t.queue_type === 'priority' ? 'text-amber-400' : 'text-neutral-400'">
-                    {{ t.queue_type === 'priority' ? 'PRI' : 'REG' }}
-                  </span>
-                </div>
-                <div class="font-mono text-3xl font-bold font-black tracking-wide text-white truncate my-0.5">
-                  {{ t.ticket_number }}
-                </div>
-                <div class="text-xs text-neutral-400 truncate">
-                  Waiting
-                </div>
-              </div>
-
-              <!-- Overflow indicator if queue exceeds visible capacity -->
-              <div
-                v-if="remainingWaitingCount > 0"
-                class="flex flex-col items-center justify-center p-1.5 rounded-xl border border-dashed border-neutral-700 bg-neutral-800/40 text-neutral-400"
-              >
-                <span class="text-xs font-bold font-mono">+{{ remainingWaitingCount }}</span>
-                <span class="text-[8px] uppercase tracking-wider">in line</span>
+                <span
+                  class="text-4xl font-extrabold font-sans tracking-wide truncate text-white"
+                >
+                  {{ String(t.ticket_number).padStart(3, '0') }}
+                </span>
               </div>
             </div>
 
             <!-- Empty Queue state -->
-            <div v-else class="flex-1 flex items-center justify-center text-xs text-neutral-500 gap-1.5">
-              <CheckCircle2 class="size-3.5 text-emerald-500/80" />
+            <div v-else class="flex-1 flex items-center justify-center text-md uppercase text-neutral-500 gap-1.5">
               <span>No customers waiting</span>
             </div>
           </div>
@@ -292,70 +274,48 @@ function unlockAndToggleSound() {
             <!-- Panel Header -->
             <div class="flex items-center justify-between pb-2 border-b border-neutral-800/80 mb-2 shrink-0">
               <div class="flex items-center gap-2 min-w-0">
-                <History class="size-4 text-emerald-400 shrink-0" />
-                <h2 class="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-200 truncate">
-                  Recently Called
+                <History class="size-4 text-amber-400 shrink-0" />
+                <h2 class="text-xs md:text-sm font-bold tracking-wider text-neutral-200 truncate">
+                  <span class="uppercase"> Recently Called </span> <span class="italic text-11">(Mga Tinawag na)</span>
                 </h2>
                 <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0">
                   {{ recentlyCalledTickets.length }}
                 </span>
               </div>
-
-              <div class="text-[10px] text-neutral-400 flex items-center gap-2 shrink-0">
-                <span class="text-neutral-400">Recent Service Activity</span>
-              </div>
             </div>
 
             <!-- Cards Grid (6 to 12 capacity, identical grid and card dimensions) -->
-            <div v-if="recentlyCalledTickets.length > 0" class="grid grid-cols-4 gap-2 flex-1 min-h-0 items-stretch overflow-hidden">
+            <div
+              v-if="recentlyCalledTickets.length > 0"
+              class="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
               <div
-                v-for="item in recentlyCalledTickets"
-                :key="item.id"
-                class="flex flex-col justify-between p-1.5 rounded-xl border text-center transition-all min-w-0"
-                :class="{
-                  'border-rose-500/40 bg-rose-500/10': item.status === 'skipped',
-                  'border-emerald-500/30 bg-neutral-800/90': item.status === 'completed',
-                  'border-amber-500/40 bg-amber-500/10': item.queue_type === 'priority' && item.status !== 'completed' && item.status !== 'skipped',
-                  'border-neutral-700/80 bg-neutral-800/80': item.queue_type === 'regular' && item.status !== 'completed' && item.status !== 'skipped',
-                }"
+                v-for="(group, index) in Array.from(
+                  { length: Math.ceil(recentlyCalledTickets.length / 8) },
+                  (_, i) => recentlyCalledTickets.slice(i * 8, i * 8 + 8)
+                )"
+                :key="index"
+                class="grid grid-cols-8 gap-2 py-2 border-b border-neutral-600/80 last:border-b-0 shrink-0"
               >
-                <!-- Top row: Status Tag (Calling, Serving, Done, Skipped) -->
-                <div class="flex items-center justify-between text-[9px] font-bold px-0.5">
-                  <span
-                    class="uppercase"
-                    :class="{
-                      'text-emerald-400': item.status === 'completed',
-                      'text-rose-400': item.status === 'skipped',
-                      'text-blue-400': item.status === 'serving',
-                      'text-amber-400': item.status === 'calling',
-                    }"
-                  >
-                    {{ item.status === 'completed' ? 'Done' : (item.status === 'skipped' ? 'Skip' : item.status) }}
-                  </span>
-                  <span :class="item.queue_type === 'priority' ? 'text-amber-400' : 'text-neutral-400'">
-                    {{ item.queue_type === 'priority' ? 'PRI' : 'REG' }}
-                  </span>
-                </div>
-
-                <!-- Center: Ticket Number -->
-                <div class="font-mono text-sm sm:text-base font-black tracking-wide text-white truncate my-0.5">
-                  {{ item.ticket_number }}
-                </div>
+                <span
+                  v-for="item in group"
+                  :key="item.id"
+                  class="text-sm font-extrabold font-sans tracking-wide text-white text-center truncate"
+                >
+                  {{ String(item.ticket_number).padStart(3, '0') }}
+                </span>
               </div>
 
-              <!-- Overflow indicator if recent records exceed visible capacity -->
               <div
                 v-if="remainingRecentCount > 0"
-                class="flex flex-col items-center justify-center p-1.5 rounded-xl border border-dashed border-neutral-700 bg-neutral-800/40 text-neutral-400"
+                class="text-xs text-neutral-400 py-1"
               >
-                <span class="text-xs font-bold font-mono">+{{ remainingRecentCount }}</span>
-                <span class="text-[8px] uppercase tracking-wider">earlier</span>
+                +{{ remainingRecentCount }} earlier
               </div>
             </div>
 
             <!-- Empty Recent Calls state -->
-            <div v-else class="flex-1 flex items-center justify-center text-xs text-neutral-500 gap-1.5">
-              <Clock class="size-3.5 opacity-60" />
+            <div v-else class="flex-1 flex items-center justify-center text-md uppercase text-neutral-500 gap-1.5">
               <span>No previous calls recorded</span>
             </div>
           </div>

@@ -322,9 +322,9 @@ async function startServer() {
       }
 
       // Verify PIN securely server-side:
-      // Accepts configured ADMIN_PIN env var (default '1234') or the admin's bcrypt password
-      const envPin = process.env.ADMIN_PIN || '1234'
-      const isPinMatch = cleanPin === envPin || cleanPin === '1234' || bcrypt.compareSync(cleanPin, adminUser.password_hash)
+      // Accepts configured ADMIN_PIN env var (default '9999') or the admin's bcrypt password
+      const envPin = process.env.ADMIN_PIN || '9999'
+      const isPinMatch = cleanPin === envPin || cleanPin === '9999' || bcrypt.compareSync(cleanPin, adminUser.password_hash)
 
       if (!isPinMatch) {
         return res.status(401).json({ error: 'Invalid Admin PIN. Please check and try again.' })
