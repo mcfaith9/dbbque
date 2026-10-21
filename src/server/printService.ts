@@ -16,6 +16,7 @@ export interface TicketPrintPayload {
 export interface PrinterInfo {
   name: string
   isDefault: boolean
+  isOnline?: boolean
 }
 
 // In-memory printer configuration (can also be set via PRINTER_NAME env variable)
@@ -45,40 +46,10 @@ export function getConfiguredLineWidth(): number {
   return configuredLineWidth
 }
 
-// ESC/POS command sequences for hardware thermal printers
-export const ESC_CODES = {
-  INIT: '\x1b@',
-  ALIGN_CENTER: '\x1ba\x01',
-  ALIGN_LEFT: '\x1ba\x00',
-  BOLD_ON: '\x1bE\x01',
-  BOLD_OFF: '\x1bE\x00',
-  SIZE_DOUBLE: '\x1d!\x11', // 2x height, 2x width (standard 58mm)
-  SIZE_TRIPLE: '\x1d!\x22', // 3x height, 3x width (wider 80mm)
-  SIZE_NORMAL: '\x1d!\x00',
-  CUT: '\x1dV\x00'
-}
-
 /**
- * Strips ESC/POS binary escape sequences to produce a clean plain-text fallback.
- */
-export function stripEscPos(text: string, ticketNumber?: string, lineWidth: number = 32): string {
-  const center = (t: string) => {
-    if (t.length >= lineWidth) return t
-    const pad = Math.floor((lineWidth - t.length) / 2)
-    return ' '.repeat(pad) + t
-  }
-
-  // Remove ESC and GS control sequences
-  let cleaned = text.replace(/\x1b[a-zA-Z0-9\x00-\x1f]|\x1d[a-zA-Z0-9\x00-\x1f]{1,2}/g, '')
-  if (ticketNumber && !cleaned.includes(`[ ${ticketNumber} ]`)) {
-    cleaned = cleaned.replace(/\[\s*\]/, center(`[ ${ticketNumber} ]`))
-  }
-  return cleaned
-}
-
-/**
- * Format ticket slip text tailored for compact thermal ticket roll (58mm / 80mm).
- * Renders the queue number BIG, BOLD, and CENTERED using ESC/POS formatting codes.
+ * Format ticket slip text tailored for Windows printing and receipt paper.
+ * Uses clean standard text formatting compatible with ALL Windows printers
+ * (EPSON L5590 ink-tank, desktop printers, and thermal printers).
  */
 export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number = configuredLineWidth): string {
   const center = (text: string) => {
@@ -97,21 +68,14 @@ export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number =
     formattedDate = ticket.created_at || new Date().toLocaleString()
   }
 
-  // Choose size multiplier based on roll width:
-  // 58mm (32 cols): Double size (2x width + 2x height, takes 18 of 32 columns)
-  // 80mm (48 cols): Triple size (3x width + 3x height, takes 27 of 48 columns)
-  const sizeCommand = lineWidth >= 40 ? ESC_CODES.SIZE_TRIPLE : ESC_CODES.SIZE_DOUBLE
-
-  // BIG, BOLD, and CENTERED queue number format: [ P-001 ]
-  const bigBoldQueueNumber = `${ESC_CODES.ALIGN_CENTER}${ESC_CODES.BOLD_ON}${sizeCommand}[ ${ticket.ticket_number} ]${ESC_CODES.SIZE_NORMAL}${ESC_CODES.BOLD_OFF}${ESC_CODES.ALIGN_LEFT}`
-
+  // Centered, prominent queue number slip layout
   const lines: string[] = [
     divider,
     center('DBBQUE SYSTEM'),
     center('Queue Management'),
     divider,
     '',
-    bigBoldQueueNumber,
+    center(`* * *  [ ${ticket.ticket_number} ]  * * *`),
     '',
     divider,
     ticket.waiting_ahead !== undefined ? `Tickets ahead: ${ticket.waiting_ahead}` : '',
@@ -122,20 +86,20 @@ export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number =
     divider,
     '',
     '',
-    '' // Extra feed lines for thermal tear-off
+    '' // Extra feed lines for tear-off
   ].filter((line) => line !== null && line !== undefined)
 
   return lines.join('\r\n')
 }
 
 /**
- * Retrieve installed printers on the host machine.
+ * Retrieve installed printers on the host machine, filtering and identifying online status.
  */
 export async function getInstalledPrinters(): Promise<PrinterInfo[]> {
   if (process.platform === 'win32') {
     try {
       const psScript = `
-        Get-CimInstance Win32_Printer | Select-Object Name, Default | ConvertTo-Json
+        Get-CimInstance Win32_Printer | Select-Object Name, Default, WorkOffline, PrinterStatus | ConvertTo-Json
       `
       const { stdout } = await execFileAsync('powershell.exe', [
         '-NoProfile',
@@ -153,7 +117,8 @@ export async function getInstalledPrinters(): Promise<PrinterInfo[]> {
       const list = Array.isArray(parsed) ? parsed : [parsed]
       return list.map((p: any) => ({
         name: String(p.Name || ''),
-        isDefault: Boolean(p.Default)
+        isDefault: Boolean(p.Default),
+        isOnline: !Boolean(p.WorkOffline) && Number(p.PrinterStatus) !== 7
       }))
     } catch (err) {
       console.warn('[PrintService] Failed to query Windows printers:', err)
@@ -163,16 +128,16 @@ export async function getInstalledPrinters(): Promise<PrinterInfo[]> {
 
   // Non-Windows dev fallback
   return [
-    { name: 'System Default Thermal Printer', isDefault: true },
-    { name: 'POS-58 Thermal USB', isDefault: false },
-    { name: 'POS-80 Thermal USB', isDefault: false }
+    { name: 'EPSON L5590 Series', isDefault: true, isOnline: true },
+    { name: 'System Default Printer', isDefault: false, isOnline: true },
+    { name: 'POS-58 Thermal USB', isDefault: false, isOnline: true }
   ]
 }
 
 /**
- * Execute direct silent physical printing to the Windows printer without any browser dialogs.
- * Uses Windows Winspool RAW printing to support hardware ESC/POS bold and double-size scaling,
- * with fallback to Out-Printer for standard text-only drivers.
+ * Execute direct silent physical printing to the Windows printer using Out-Printer.
+ * Compatible with Epson L5590 Series, HP, standard desktop printers, and thermal printers.
+ * Safely filters out offline or erroring printers.
  */
 export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{ success: boolean; message?: string; printerUsed?: string }> {
   // 1. Strict payload validation
@@ -193,118 +158,64 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
   if (process.platform === 'win32') {
     const tempDir = os.tmpdir()
     const timestamp = Date.now()
-    const rawFilePath = path.join(tempDir, `dbbque_raw_${timestamp}_${safeTicketNumber}.prn`)
-    const plainFilePath = path.join(tempDir, `dbbque_plain_${timestamp}_${safeTicketNumber}.txt`)
+    const tempFilePath = path.join(tempDir, `dbbque_ticket_${timestamp}_${safeTicketNumber}.txt`)
 
     try {
-      // 1. Prepare raw ESC/POS binary file with hardware initialization and auto-cut
-      const rawHeader = ESC_CODES.INIT
-      const rawFooter = `\r\n\r\n\r\n${ESC_CODES.CUT}`
-      const fullRawContent = rawHeader + receiptContent + rawFooter
-      fs.writeFileSync(rawFilePath, Buffer.from(fullRawContent, 'binary'))
+      // Write clean UTF-8 text file for Windows Out-Printer
+      fs.writeFileSync(tempFilePath, receiptContent, { encoding: 'utf8' })
 
-      // 2. Prepare clean plaintext version (strips ESC/POS codes for Out-Printer fallback)
-      const plainContent = stripEscPos(receiptContent, ticket.ticket_number, lineWidth)
-      fs.writeFileSync(plainFilePath, plainContent, { encoding: 'utf8' })
-
-      // 3. PowerShell execution with Win32 Spooler RAW printing + Out-Printer fallback
       const escapedPrinter = targetPrinter.replace(/'/g, "''")
-      const escapedRawPath = rawFilePath.replace(/'/g, "''")
-      const escapedPlainPath = plainFilePath.replace(/'/g, "''")
+      const escapedFilePath = tempFilePath.replace(/'/g, "''")
 
+      // PowerShell script:
+      // 1. Resolves target printer (ignoring offline/erroring devices like pending deletion HP printers)
+      // 2. Pipes the text through Out-Printer directly to Windows Print Spooler
+      // 3. Verifies execution and reports the printer actually used
       const psScript = `
         $ErrorActionPreference = 'Stop'
-        $printer = '${escapedPrinter}'
+        $target = '${escapedPrinter}'
 
-        if (-not $printer) {
-            $def = Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1
-            if ($def) { $printer = $def.Name }
-            else {
-                $any = Get-CimInstance Win32_Printer | Select-Object -First 1
-                if ($any) { $printer = $any.Name }
+        if ($target) {
+            $printerObj = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq $target } | Select-Object -First 1
+            if (-not $printerObj) {
+                throw "Specified printer '$target' was not found in Windows."
             }
-        }
-
-        if (-not $printer) {
-            throw "No available printer found on Windows."
-        }
-
-        $rawHelperCode = @'
-        using System;
-        using System.IO;
-        using System.Runtime.InteropServices;
-
-        public class RawPrinterHelper {
-            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-            public class DOCINFOA {
-                [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
-                [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
-                [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+            if ($printerObj.WorkOffline -eq $true) {
+                throw "Specified printer '$target' is currently Offline."
             }
-            [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+            $printerName = $printerObj.Name
+        } else {
+            # Automatically find available online printers (excluding Offline, PendingDeletion, Error)
+            $allPrinters = Get-CimInstance Win32_Printer
+            $activePrinters = $allPrinters | Where-Object {
+                $_.WorkOffline -ne $true -and
+                $_.PrinterStatus -ne 7 -and
+                $_.Status -ne 'Error'
+            }
 
-            [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool ClosePrinter(IntPtr hPrinter);
-
-            [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
-
-            [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool EndDocPrinter(IntPtr hPrinter);
-
-            [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool StartPagePrinter(IntPtr hPrinter);
-
-            [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool EndPagePrinter(IntPtr hPrinter);
-
-            [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-            public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
-
-            public static bool SendFile(string printerName, string filePath) {
-                if (!File.Exists(filePath)) return false;
-                byte[] bytes = File.ReadAllBytes(filePath);
-                IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
-                Marshal.Copy(bytes, 0, pUnmanagedBytes, bytes.Length);
-
-                IntPtr hPrinter = IntPtr.Zero;
-                DOCINFOA di = new DOCINFOA();
-                di.pDocName = "DBBQUE Ticket";
-                di.pDataType = "RAW";
-
-                bool ok = false;
-                if (OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) {
-                    if (StartDocPrinter(hPrinter, 1, di)) {
-                        if (StartPagePrinter(hPrinter)) {
-                            int written = 0;
-                            ok = WritePrinter(hPrinter, pUnmanagedBytes, bytes.Length, out written);
-                            EndPagePrinter(hPrinter);
-                        }
-                        EndDocPrinter(hPrinter);
-                    }
-                    ClosePrinter(hPrinter);
+            # Prefer the default printer if it is online and healthy
+            $def = $activePrinters | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+            if ($def) {
+                $printerName = $def.Name
+            } else {
+                # Otherwise pick the first online printer (e.g. EPSON L5590 Series)
+                $firstActive = $activePrinters | Select-Object -First 1
+                if ($firstActive) {
+                    $printerName = $firstActive.Name
+                } else {
+                    # Last fallback if all show offline flags
+                    $printerName = ($allPrinters | Select-Object -First 1).Name
                 }
-                Marshal.FreeCoTaskMem(pUnmanagedBytes);
-                return ok;
             }
         }
-'@
 
-        try {
-            if (-not ([System.Management.Automation.PSTypeName]'RawPrinterHelper').Type) {
-                Add-Type -TypeDefinition $rawHelperCode
-            }
-            $printed = [RawPrinterHelper]::SendFile($printer, '${escapedRawPath}')
-            if (-not $printed) {
-                throw "Winspool RAW printing returned false."
-            }
-            Write-Output "SUCCESS:RAW:$printer"
-        } catch {
-            # Fallback to standard Out-Printer with clean plain text
-            Get-Content -LiteralPath '${escapedPlainPath}' -Raw -Encoding UTF8 | Out-Printer -Name $printer
-            Write-Output "SUCCESS:OUTPRINTER:$printer"
+        if (-not $printerName) {
+            throw "No operational printer found. Please connect and power on your printer."
         }
+
+        # Send text job silently to the resolved Windows printer
+        Get-Content -LiteralPath '${escapedFilePath}' -Raw -Encoding UTF8 | Out-Printer -Name $printerName
+        Write-Output "SUCCESS:$printerName"
       `
 
       const { stdout } = await execFileAsync('powershell.exe', [
@@ -315,39 +226,42 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
         psScript
       ])
 
-      const usedPrinter = stdout.includes('SUCCESS:')
-        ? stdout.split(':')[2]?.trim() || targetPrinter || 'Default Windows Printer'
-        : targetPrinter || 'Default Windows Printer'
+      const trimmedOut = stdout.trim()
+      if (trimmedOut.startsWith('SUCCESS:')) {
+        const usedPrinter = trimmedOut.split(':')[1]?.trim() || targetPrinter || 'Default Windows Printer'
+        console.log(`[PrintService] Physical print job submitted successfully to: ${usedPrinter}`)
+        return {
+          success: true,
+          message: `Ticket sent to printer spooler (${usedPrinter})`,
+          printerUsed: usedPrinter
+        }
+      }
 
       return {
-        success: true,
-        message: 'Ticket sent to printer spooler successfully (Hardware ESC/POS)',
-        printerUsed: usedPrinter
+        success: false,
+        message: 'Printer spooler returned unexpected output: ' + trimmedOut
       }
     } catch (err: any) {
-      console.error('[PrintService] Windows print job failed:', err)
+      console.error('[PrintService] Windows print job failed:', err?.message || err)
       return {
         success: false,
-        message: err?.message || 'Windows printer spooler error. Check printer USB cable and paper roll.'
+        message: err?.message || 'Windows printer spooler error. Please check printer power and USB connection.'
       }
     } finally {
-      // Clean up temporary files safely
       try {
-        if (fs.existsSync(rawFilePath)) fs.unlinkSync(rawFilePath)
-      } catch {}
-      try {
-        if (fs.existsSync(plainFilePath)) fs.unlinkSync(plainFilePath)
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath)
+        }
       } catch {}
     }
   } else {
     // Non-Windows environment (e.g. Linux container / local dev simulation)
-    const cleanDisplay = stripEscPos(receiptContent, ticket.ticket_number, lineWidth)
-    console.log('[PrintService] Simulated Thermal Ticket Print:')
-    console.log(cleanDisplay)
+    console.log('[PrintService] Simulated Physical Ticket Print:')
+    console.log(receiptContent)
     return {
       success: true,
       message: 'Ticket sent to physical printer (Simulation / Virtual Spooler)',
-      printerUsed: targetPrinter || 'Virtual Thermal Receipt Printer'
+      printerUsed: targetPrinter || 'EPSON L5590 Series (Simulated)'
     }
   }
 }
