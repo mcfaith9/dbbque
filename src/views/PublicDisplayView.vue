@@ -12,7 +12,10 @@ import {
   Sparkles,
   Wifi,
   WifiOff,
-  ArrowRight
+  ArrowRight,
+  Clock,
+  History,
+  Layers
 } from '@lucide/vue'
 
 const queue = useQueueStore()
@@ -30,7 +33,57 @@ onMounted(() => {
 
 // Current most prominent calling ticket
 const primaryCallingTicket = computed<Ticket | null>(() => {
-  return queue.callingTickets[0] || null
+  // If there's an active calling ticket, pick the most recently called
+  if (queue.callingTickets.length > 0) {
+    return queue.callingTickets[0]
+  }
+  // Otherwise, fall back to the most recent completed ticket if available
+  if (queue.recentCompleted.length > 0) {
+    return queue.recentCompleted[0]
+  }
+  return null
+})
+
+// Whether the primary ticket is actively being called right now
+const isPrimaryActive = computed(() => {
+  return primaryCallingTicket.value ? ['calling', 'serving'].includes(primaryCallingTicket.value.status) : false
+})
+
+// Structured Recent Calls (Top 6 entries, strictly bounded to prevent overflow)
+const recentCalls = computed(() => {
+  const map = new Map<string, Ticket>()
+
+  // 1. Add all calling/serving tickets
+  for (const t of queue.callingTickets) {
+    // If it's already shown as primary and there are others, we still list all or non-primary
+    if (!map.has(t.ticket_number)) {
+      map.set(t.ticket_number, t)
+    }
+  }
+
+  // 2. Add completed/skipped tickets
+  for (const t of queue.recentCompleted) {
+    if (!map.has(t.ticket_number)) {
+      map.set(t.ticket_number, t)
+    }
+  }
+
+  const list = Array.from(map.values())
+
+  // Sort by called_at (or id) descending
+  list.sort((a, b) => {
+    const timeA = a.called_at ? new Date(a.called_at).getTime() : a.id
+    const timeB = b.called_at ? new Date(b.called_at).getTime() : b.id
+    return timeB - timeA
+  })
+
+  // Return up to 6 recent items (excluding the primary hero ticket if more than 1 ticket exists)
+  if (list.length > 1 && primaryCallingTicket.value) {
+    const filtered = list.filter(t => t.id !== primaryCallingTicket.value?.id)
+    return filtered.slice(0, 6)
+  }
+
+  return list.slice(0, 6)
 })
 
 function toggleFullscreen() {
@@ -50,16 +103,16 @@ function unlockAndToggleSound() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-neutral-950 text-white flex flex-col justify-between selection:bg-neutral-800 overflow-hidden font-sans">
+  <div class="h-screen max-h-screen w-screen bg-neutral-950 text-white flex flex-col justify-between selection:bg-neutral-800 overflow-hidden font-sans">
     <!-- Top Display Header -->
-    <header class="border-b border-neutral-800/80 bg-neutral-900/90 px-8 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <div class="size-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-black text-xl shadow-md">
+    <header class="h-16 md:h-18 shrink-0 border-b border-neutral-800/80 bg-neutral-900/95 px-6 md:px-8 flex items-center justify-between">
+      <div class="flex items-center gap-3.5">
+        <div class="size-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-black text-xl shadow-md">
           Q
         </div>
         <div>
-          <h1 class="text-xl md:text-2xl font-black tracking-tight text-white flex items-center gap-3">
-            QUEUE STATUS DISPLAY
+          <h1 class="text-lg md:text-xl font-black tracking-tight text-white flex items-center gap-2.5">
+            <span>PUBLIC QUEUE DISPLAY</span>
             <span
               class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full"
               :class="isSocketConnected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
@@ -68,12 +121,12 @@ function unlockAndToggleSound() {
               {{ isSocketConnected ? 'Live Synchronized' : 'Reconnecting...' }}
             </span>
           </h1>
-          <p class="text-xs text-neutral-400">Please proceed to your assigned table when your ticket number appears.</p>
+          <p class="text-xs text-neutral-400 hidden sm:block">Please proceed to your assigned table when your ticket number is announced.</p>
         </div>
       </div>
 
-      <!-- Controls: Audio Unlock / Sound Toggle / Fullscreen / Clock -->
-      <div class="flex items-center gap-4">
+      <!-- Controls: Audio Unlock / Fullscreen / Clock / Queue Count -->
+      <div class="flex items-center gap-3 md:gap-4">
         <button
           type="button"
           class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer"
@@ -83,7 +136,7 @@ function unlockAndToggleSound() {
           @click="unlockAndToggleSound"
         >
           <component :is="isVoiceEnabled && isAudioUnlocked ? Volume2 : VolumeX" class="size-4" />
-          <span>{{ !isAudioUnlocked ? 'Click to Enable Audio' : (isVoiceEnabled ? 'Voice ON' : 'Voice OFF') }}</span>
+          <span>{{ !isAudioUnlocked ? 'Enable Voice' : (isVoiceEnabled ? 'Voice ON' : 'Voice OFF') }}</span>
         </button>
 
         <button
@@ -96,25 +149,32 @@ function unlockAndToggleSound() {
         </button>
 
         <div class="text-right pl-3 border-l border-neutral-800">
-          <div class="text-lg font-mono font-bold tracking-wider text-neutral-200">
+          <div class="text-base md:text-lg font-mono font-bold tracking-wider text-neutral-200">
             {{ currentTime }}
           </div>
-          <div class="text-[10px] uppercase text-neutral-500 font-semibold tracking-wider">
-            Waiting in queue: {{ queue.stats.totalWaiting }}
+          <div class="text-[10px] uppercase text-neutral-400 font-semibold tracking-wider">
+            Waiting in queue: <strong class="text-amber-400">{{ queue.stats.totalWaiting }}</strong>
           </div>
         </div>
       </div>
     </header>
 
-    <!-- Main Live Screen Area -->
-    <main class="flex-1 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-      <!-- Left Hero Banner: Currently Called Ticket (7 cols) -->
-      <div class="lg:col-span-7 flex flex-col justify-between rounded-3xl border-2 border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 p-8 md:p-12 shadow-2xl relative overflow-hidden">
-        <div class="flex items-center justify-between">
+    <!-- Main Workspace (Strictly bounded flex-1 min-h-0 to fit 1920x1080 without scrolling) -->
+    <main class="flex-1 min-h-0 p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch overflow-hidden">
+      <!-- Left Hero Column: Most Prominent Ticket Being Called (7 cols) -->
+      <div class="lg:col-span-7 flex flex-col justify-between rounded-3xl border-2 border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 p-6 md:p-10 shadow-2xl relative overflow-hidden min-h-0">
+        <!-- Hero Header -->
+        <div class="flex items-center justify-between shrink-0">
           <div class="flex items-center gap-3">
-            <span class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse">
-              ● Now Calling
+            <span
+              class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider border shadow-xs"
+              :class="isPrimaryActive
+                ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
+                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'"
+            >
+              {{ isPrimaryActive ? '● NOW CALLING' : '✓ LAST CALLED' }}
             </span>
+
             <span
               v-if="primaryCallingTicket"
               class="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
@@ -123,121 +183,168 @@ function unlockAndToggleSound() {
                 : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'"
             >
               <Sparkles v-if="primaryCallingTicket.queue_type === 'priority'" class="size-3" />
-              {{ primaryCallingTicket.queue_type }} customer
+              {{ primaryCallingTicket.queue_type }} Lane
             </span>
           </div>
 
-          <div v-if="primaryCallingTicket" class="text-xs text-neutral-400 font-mono">
-            Called at {{ new Date(primaryCallingTicket.called_at || '').toLocaleTimeString() }}
+          <div v-if="primaryCallingTicket?.called_at" class="text-xs text-neutral-400 font-mono flex items-center gap-1.5">
+            <Clock class="size-3.5" />
+            <span>Called at {{ new Date(primaryCallingTicket.called_at).toLocaleTimeString() }}</span>
           </div>
         </div>
 
-        <!-- Center Big Number & Counter -->
-        <div v-if="primaryCallingTicket" class="my-auto py-8 text-center">
-          <div class="text-xs uppercase tracking-widest text-neutral-400 font-bold mb-2">
-            Ticket Number
+        <!-- Center Huge Ticket Number and Destination Table -->
+        <div v-if="primaryCallingTicket" class="my-auto py-4 text-center shrink-0">
+          <div class="text-xs md:text-sm uppercase tracking-widest text-neutral-400 font-bold mb-2">
+            Queue Ticket Number
           </div>
-          <div class="text-7xl sm:text-8xl md:text-9xl font-black font-mono tracking-tight text-white drop-shadow-[0_10px_35px_rgba(255,255,255,0.15)]">
+
+          <!-- Extra large, readable from across a room -->
+          <div class="text-7xl sm:text-8xl md:text-9xl lg:text-[10rem] font-black font-mono tracking-tight text-white drop-shadow-[0_12px_45px_rgba(255,255,255,0.2)] leading-none select-none">
             {{ primaryCallingTicket.ticket_number }}
           </div>
 
-          <div class="mt-8 inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-neutral-800/90 border border-neutral-700 shadow-lg">
-            <span class="text-sm uppercase tracking-wider text-neutral-400 font-semibold">Proceed To:</span>
-            <span class="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">
-              {{ primaryCallingTicket.counter_name || 'Assigned Counter' }}
+          <!-- Destination Counter / Table Card -->
+          <div class="mt-6 md:mt-8 inline-flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-neutral-800/90 border border-neutral-700 shadow-xl max-w-full">
+            <span class="text-xs sm:text-sm uppercase tracking-wider text-neutral-400 font-semibold shrink-0">
+              Please Proceed To:
             </span>
+            <span class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-amber-400 font-mono truncate">
+              {{ primaryCallingTicket.counter_name || 'Assigned Table' }}
+            </span>
+          </div>
+
+          <div v-if="primaryCallingTicket.recalled_count > 0" class="mt-3 text-xs text-amber-400 font-semibold">
+            Repeating call ({{ primaryCallingTicket.recalled_count }}x)
           </div>
         </div>
 
-        <div v-else class="my-auto py-16 text-center text-neutral-500">
-          <Tv class="size-16 mx-auto mb-4 opacity-40" />
-          <h2 class="text-3xl font-bold text-neutral-300">All Counters Are Ready</h2>
-          <p class="text-sm text-neutral-500 mt-2">Next available customer will be announced shortly.</p>
+        <div v-else class="my-auto py-12 text-center text-neutral-500">
+          <Tv class="size-16 mx-auto mb-3 opacity-30" />
+          <h2 class="text-2xl md:text-3xl font-bold text-neutral-300">All Counters Ready</h2>
+          <p class="text-sm text-neutral-500 mt-1">Next customer in queue will be announced here.</p>
         </div>
 
-        <!-- Bottom status notice -->
-        <div class="pt-4 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
-          <span>Priority rules enabled ({{ queue.settings.priority_ratio }} Priority : {{ queue.settings.regular_ratio }} Regular)</span>
-          <span class="text-neutral-500">System v1.0</span>
+        <!-- Hero Footer -->
+        <div class="pt-3 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400 shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="size-2 rounded-full bg-emerald-400"></span>
+            <span>Policy: <strong>{{ queue.settings.priority_ratio }} Priority : {{ queue.settings.regular_ratio }} Regular</strong></span>
+          </div>
+          <span class="text-neutral-500">DBBQUE System</span>
         </div>
       </div>
 
-      <!-- Right 5 cols: Table of all counters & active calls -->
-      <div class="lg:col-span-5 flex flex-col justify-between gap-6">
-        <!-- Live Counters Assignment Table -->
-        <div class="flex-1 rounded-3xl border border-neutral-800 bg-neutral-900/90 p-6 flex flex-col">
-          <h2 class="text-base font-bold uppercase tracking-wider text-neutral-300 mb-4 flex items-center justify-between">
-            <span>Counter Stations</span>
-            <span class="text-xs text-neutral-500 font-normal">Active assignments</span>
-          </h2>
+      <!-- Right Column: Counter Stations Grid + Recent Called Numbers (5 cols) -->
+      <div class="lg:col-span-5 flex flex-col justify-between gap-4 min-h-0">
+        <!-- 1. Active Counter Stations Overview (Compact 2-column grid) -->
+        <div class="rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4 md:p-5 flex flex-col min-h-0 flex-1">
+          <div class="flex items-center justify-between pb-3 border-b border-neutral-800 mb-3 shrink-0">
+            <h2 class="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+              <Layers class="size-4 text-primary" />
+              <span>Counter Stations ({{ queue.counters.length }})</span>
+            </h2>
+            <span class="text-[11px] text-neutral-400">Live Station Status</span>
+          </div>
 
-          <div class="flex-1 space-y-2.5 overflow-y-auto pr-1">
+          <!-- 2-column compact grid fitting all 8 counters without forcing vertical scroll -->
+          <div class="grid grid-cols-2 gap-2 overflow-y-auto pr-1 flex-1 min-h-0">
             <div
               v-for="c in queue.counters"
               :key="c.id"
-              class="flex items-center justify-between p-3.5 rounded-2xl border transition-all"
+              class="flex items-center justify-between p-2.5 rounded-xl border transition-all"
               :class="c.current_ticket
-                ? 'border-neutral-700 bg-neutral-800/80 shadow-md'
+                ? 'border-neutral-700 bg-neutral-800/90 shadow-sm'
                 : 'border-neutral-800/60 bg-neutral-900/40 opacity-70'"
             >
-              <div class="flex items-center gap-3">
-                <span class="size-8 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-xs font-mono text-neutral-300">
+              <div class="flex items-center gap-2 min-w-0 pr-1">
+                <span class="size-7 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-xs font-mono text-neutral-200 shrink-0">
                   {{ c.code }}
                 </span>
-                <div>
-                  <div class="font-bold text-sm text-white">{{ c.name }}</div>
-                  <div class="text-[11px] text-neutral-400">
-                    {{ c.assigned_user?.name || 'Available' }}
+                <div class="min-w-0">
+                  <div class="font-bold text-xs text-white truncate">{{ c.name }}</div>
+                  <div class="text-[10px] text-neutral-400 truncate">
+                    {{ c.assigned_user?.name || 'Staff' }}
                   </div>
                 </div>
               </div>
 
-              <div class="text-right">
-                <div v-if="c.current_ticket" class="flex items-center gap-2">
-                  <span
-                    class="font-mono font-black text-lg px-3 py-1 rounded-xl tracking-wider"
-                    :class="c.current_ticket.queue_type === 'priority'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-neutral-700 text-white'"
-                  >
-                    {{ c.current_ticket.ticket_number }}
-                  </span>
-                </div>
-                <div v-else class="text-xs text-neutral-500 italic">
+              <div class="shrink-0 text-right">
+                <span
+                  v-if="c.current_ticket"
+                  class="font-mono font-black text-sm md:text-base px-2 py-0.5 rounded-lg tracking-wider"
+                  :class="c.current_ticket.queue_type === 'priority'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-neutral-700 text-white'"
+                >
+                  {{ c.current_ticket.ticket_number }}
+                </span>
+                <span v-else class="text-[10px] text-neutral-500 italic">
                   Idle
-                </div>
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Recent Completed / Calling Ticker -->
-        <div class="rounded-3xl border border-neutral-800 bg-neutral-900/90 p-5">
-          <div class="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5">
-            Recently Called Numbers
+        <!-- 2. Recent Called Numbers Section (Fixed, overflow-proof structured card grid) -->
+        <div class="rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4 md:p-5 shrink-0 flex flex-col">
+          <div class="flex items-center justify-between pb-2.5 border-b border-neutral-800 mb-3 shrink-0">
+            <h2 class="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+              <History class="size-4 text-amber-400" />
+              <span>Recent Called Numbers</span>
+            </h2>
+            <span class="text-[11px] text-neutral-400">Past Calls</span>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <span
-              v-for="item in queue.callingTickets"
+
+          <!-- Structured 3-col or 2-col card layout with large visible numbers -->
+          <div v-if="recentCalls.length > 0" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div
+              v-for="item in recentCalls"
               :key="item.id"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-700 bg-neutral-800 text-xs font-mono font-bold"
+              class="flex flex-col justify-between p-2.5 rounded-xl border border-neutral-700/80 bg-neutral-800/90 shadow-sm transition-transform"
             >
-              <span class="text-neutral-400 text-[10px]">{{ item.counter_name }}</span>
-              <ArrowRight class="size-3 text-neutral-500" />
-              <strong class="text-white">{{ item.ticket_number }}</strong>
-            </span>
-            <span v-if="queue.callingTickets.length === 0" class="text-xs text-neutral-500 py-1">
-              No recent calls to display.
-            </span>
+              <!-- Ticket Number in large bold font -->
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xl md:text-2xl font-black text-white tracking-wide">
+                  {{ item.ticket_number }}
+                </span>
+                <span
+                  class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase"
+                  :class="item.queue_type === 'priority' ? 'bg-amber-500/20 text-amber-300' : 'bg-muted text-neutral-300'"
+                >
+                  {{ item.queue_type === 'priority' ? 'PRI' : 'REG' }}
+                </span>
+              </div>
+
+              <!-- Counter Destination -->
+              <div class="mt-1 flex items-center gap-1 text-xs text-amber-400 font-semibold truncate">
+                <ArrowRight class="size-3 text-neutral-400 shrink-0" />
+                <span class="truncate">{{ item.counter_name || 'Counter' }}</span>
+              </div>
+
+              <!-- Status & Time -->
+              <div class="mt-1 text-[10px] text-neutral-400 flex items-center justify-between border-t border-neutral-700/50 pt-1">
+                <span class="capitalize">{{ item.status }}</span>
+                <span v-if="item.called_at" class="font-mono text-neutral-500">
+                  {{ new Date(item.called_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty fallback -->
+          <div v-else class="text-center py-5 text-xs text-neutral-500">
+            No previous calls recorded yet today.
           </div>
         </div>
       </div>
     </main>
 
-    <!-- Bottom Reconnection Notice -->
+    <!-- Bottom Reconnection Notice (only shows if socket disconnected) -->
     <div
       v-if="!isSocketConnected"
-      class="bg-amber-600 text-black px-6 py-2 text-center text-xs font-bold flex items-center justify-center gap-2"
+      class="bg-amber-600 text-black px-6 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shrink-0"
     >
       <WifiOff class="size-4 animate-spin" />
       <span>Network connection interrupted. Automatically reconnecting and restoring current queue status...</span>
