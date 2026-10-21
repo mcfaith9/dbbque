@@ -165,7 +165,10 @@ function handleKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="min-h-screen min-h-dvh bg-zinc-950 text-zinc-100 flex flex-col justify-between selection:bg-zinc-800 selection:text-white overflow-x-hidden">
+  <div
+      class="min-h-screen bg-cover bg-center bg-no-repeat text-white"
+      style="background: #0F2027; background: linear-gradient(180deg, #0F2027 0%, #2C5364 100%);"
+    >
     <!-- Main Content Container -->
     <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:py-12 flex flex-col justify-center">
       <!-- Minimalist Header -->
@@ -174,7 +177,7 @@ function handleKeydown(e: KeyboardEvent) {
           Select Terminal
         </h2>
         <p class="text-sm text-zinc-400 mt-1">
-          Choose a table to open its ordering station, or enter Admin with PIN.
+          Choose a table to open its ordering station.
         </p>
       </div>
 
@@ -277,15 +280,16 @@ function handleKeydown(e: KeyboardEvent) {
           </div>
         </button>
       </div>
-    </main>
 
-    <!-- Minimalist Footer -->
-    <footer class="border-t border-zinc-850 py-4 px-6 text-center text-xs text-zinc-500">
-      <div class="max-w-5xl mx-auto flex items-center justify-between">
-        <span>Visayan Electric</span>
-        <span>Version 1.0</span>
+      <div class="mt-2 text-center sm:text-left pt-6">
+        <h2 class="text-1xl font-semibold tracking-tight text-zinc-100">
+          Visayan Electric
+        </h2>
+        <span class="text-xs text-white/60">
+          version 0.0.1 | Crafted with <span class="text-rose-400">♥</span> by Marc Louie (DBB IT)
+        </span>
       </div>
-    </footer>
+    </main>
 
     <!-- Admin PIN Entry Modal Dialog (Neutral Minimalist Theme) -->
     <div

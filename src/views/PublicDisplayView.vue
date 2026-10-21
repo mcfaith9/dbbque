@@ -268,7 +268,7 @@ function toggleFullscreen() {
               <iframe
                 ref="videoIframeRef"
                 class="w-full h-full pointer-events-none select-none"
-                src="https://www.youtube.com/embed/QsK8n1Ndv-Y?autoplay=1&mute=0&controls=0&loop=1&playlist=QsK8n1Ndv-Y&playsinline=1&enablejsapi=1"
+                src="https://www.youtube.com/embed/QsK8n1Ndv-Y?autoplay=1&mute=1&controls=0&loop=1&playlist=QsK8n1Ndv-Y&playsinline=1"
                 title="DBBQUE Promotional Video"
                 frameborder="0"
                 allow="autoplay; encrypted-media; picture-in-picture"

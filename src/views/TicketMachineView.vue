@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Printer,
-  Sparkles,
+  Accessibility,
   UsersRound,
   LogOut,
   CheckCircle2,
@@ -152,7 +152,7 @@ async function handleLogout() {
           >
             <div class="flex items-start justify-between">
               <div class="size-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Sparkles class="size-8" />
+                <Accessibility class="size-8" />
               </div>
               <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 uppercase tracking-wider">
                 Express Lane
