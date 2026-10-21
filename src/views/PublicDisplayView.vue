@@ -118,88 +118,53 @@ function unlockAndToggleSound() {
 
 <template>
   <div class="h-screen max-h-screen w-screen bg-neutral-950 text-white flex flex-col justify-between selection:bg-neutral-800 overflow-hidden font-sans">
-    <!-- Top Display Header (Fixed height) -->
-    <header class="h-16 shrink-0 border-b border-neutral-800/80 bg-neutral-900/95 px-6 md:px-8 flex items-center justify-between">
-      <div class="flex items-center gap-3.5">
-        <div class="size-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-black text-lg shadow-md">
-          Q
-        </div>
-        <div>
-          <h1 class="text-lg md:text-xl font-black tracking-tight text-white flex items-center gap-2.5">
-            <span>PUBLIC QUEUE DISPLAY</span>
-            <span
-              class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full"
-              :class="isSocketConnected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
-            >
-              <component :is="isSocketConnected ? Wifi : WifiOff" class="size-3.5" />
-              {{ isSocketConnected ? 'Live Synchronized' : 'Reconnecting...' }}
-            </span>
-          </h1>
-          <p class="text-xs text-neutral-400 hidden sm:block">Please proceed to your assigned table when your ticket number is announced.</p>
-        </div>
-      </div>
-
-      <!-- Controls: Audio Unlock / Fullscreen / Clock / Queue Count -->
-      <div class="flex items-center gap-3 md:gap-4">
-        <button
-          type="button"
-          class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer"
-          :class="isVoiceEnabled && isAudioUnlocked
-            ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
-            : 'border-amber-500/50 bg-amber-500/10 text-amber-300 animate-pulse'"
-          @click="unlockAndToggleSound"
-        >
-          <component :is="isVoiceEnabled && isAudioUnlocked ? Volume2 : VolumeX" class="size-4" />
-          <span>{{ !isAudioUnlocked ? 'Enable Voice' : (isVoiceEnabled ? 'Voice ON' : 'Voice OFF') }}</span>
-        </button>
-
-        <button
-          type="button"
-          class="p-2 rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors cursor-pointer"
-          title="Toggle Fullscreen"
-          @click="toggleFullscreen"
-        >
-          <component :is="isFullscreen ? Minimize2 : Maximize2" class="size-4" />
-        </button>
-
-        <div class="text-right pl-3 border-l border-neutral-800">
-          <div class="text-base md:text-lg font-mono font-bold tracking-wider text-neutral-200">
-            {{ currentTime }}
-          </div>
-          <div class="text-[10px] uppercase text-neutral-400 font-semibold tracking-wider">
-            Waiting in queue: <strong class="text-amber-400">{{ queue.stats.totalWaiting }}</strong>
-          </div>
-        </div>
-      </div>
-    </header>
-
     <!-- Main Workspace: Bounded flex-1 to strictly prevent scrolling on 1920x1080 -->
     <main class="flex-1 min-h-0 p-4 md:p-5 flex flex-col justify-between gap-4 overflow-hidden">
       <!-- Top Row: Hero "Now Calling" (Left ~60%) + Counter Stations (Right ~40%) -->
       <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         <!-- 1. Hero: Most Prominent Ticket Being Called (7 cols) -->
-        <div class="lg:col-span-7 flex flex-col justify-between rounded-3xl border-2 border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 p-6 md:p-8 shadow-2xl relative overflow-hidden min-h-0">
+        <div class="lg:col-span-7 flex flex-col justify-between p-6 md:p-8 relative overflow-hidden min-h-0">
           <!-- Hero Header -->
+          <!-- Controls: Audio Unlock / Fullscreen / Clock / Queue Count -->
+          <div class="flex items-center gap-3 md:gap-4 ml-auto">
+            <button
+              type="button"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer"
+              :class="isVoiceEnabled && isAudioUnlocked
+                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
+                : 'border-amber-500/50 bg-amber-500/10 text-amber-300 animate-pulse'"
+              @click="unlockAndToggleSound"
+            >
+              <component :is="isVoiceEnabled && isAudioUnlocked ? Volume2 : VolumeX" class="size-4" />
+            </button>
+
+            <button
+              type="button"
+              class="p-2 rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+              title="Toggle Fullscreen"
+              @click="toggleFullscreen"
+            >
+              <component :is="isFullscreen ? Minimize2 : Maximize2" class="size-4" />
+            </button>
+
+            <div class="text-right pl-3 border-l border-neutral-800">
+              <div class="text-base md:text-2xl font-mono font-bold tracking-wider text-neutral-200">
+                {{ currentTime }}
+              </div>
+              <div class="text-[10px] uppercase text-neutral-400 font-semibold tracking-wider">
+                Waiting in queue: <strong class="text-amber-400">{{ queue.stats.totalWaiting }}</strong>
+              </div>
+            </div>
+          </div>
           <div class="flex items-center justify-between shrink-0">
             <div class="flex items-center gap-3">
               <span
                 class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider border shadow-xs"
                 :class="isPrimaryActive
-                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
+                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 text-white animate-pulse'
                   : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'"
               >
                 {{ isPrimaryActive ? '● NOW CALLING' : '✓ LAST CALLED' }}
-              </span>
-
-              <span
-                v-if="primaryCallingTicket"
-                class="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
-                :class="primaryCallingTicket.queue_type === 'priority'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'"
-              >
-                <Sparkles v-if="primaryCallingTicket.queue_type === 'priority'" class="size-3" />
-                {{ primaryCallingTicket.queue_type }} Lane
               </span>
             </div>
 
@@ -225,7 +190,7 @@ function unlockAndToggleSound() {
               <span class="text-xs sm:text-sm uppercase tracking-wider text-neutral-400 font-semibold shrink-0">
                 Please Proceed To:
               </span>
-              <span class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-amber-400 font-mono truncate">
+              <span class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-amber-400 font-mono uppercase truncate">
                 {{ primaryCallingTicket.counter_name || 'Assigned Table' }}
               </span>
             </div>
@@ -239,15 +204,6 @@ function unlockAndToggleSound() {
             <Tv class="size-14 mx-auto mb-3 opacity-30" />
             <h2 class="text-2xl font-bold text-neutral-300">All Counters Ready</h2>
             <p class="text-sm text-neutral-500 mt-1">Next customer in queue will be announced here.</p>
-          </div>
-
-          <!-- Hero Footer -->
-          <div class="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400 shrink-0">
-            <div class="flex items-center gap-2">
-              <span class="size-2 rounded-full bg-emerald-400"></span>
-              <span>Policy: <strong>{{ queue.settings.priority_ratio }} Priority : {{ queue.settings.regular_ratio }} Regular</strong></span>
-            </div>
-            <span class="text-neutral-500">DBBQUE System</span>
           </div>
         </div>
 
@@ -399,7 +355,7 @@ function unlockAndToggleSound() {
           </div>
 
           <!-- Cards Grid (6 to 12 capacity, identical grid and card dimensions) -->
-          <div v-if="recentlyCalledTickets.length > 0" class="grid grid-cols-4 sm:grid-cols-6 gap-2 flex-1 min-h-0 items-stretch overflow-hidden">
+          <div v-if="recentlyCalledTickets.length > 0" class="grid grid-cols-4 gap-2 flex-1 min-h-0 items-stretch overflow-hidden">
             <div
               v-for="item in recentlyCalledTickets"
               :key="item.id"
@@ -432,12 +388,6 @@ function unlockAndToggleSound() {
               <!-- Center: Ticket Number -->
               <div class="font-mono text-sm sm:text-base font-black tracking-wide text-white truncate my-0.5">
                 {{ item.ticket_number }}
-              </div>
-
-              <!-- Bottom: Counter destination -->
-              <div class="text-[9px] text-amber-400 font-semibold truncate flex items-center justify-center gap-0.5">
-                <ArrowRight class="size-2.5 text-neutral-400 shrink-0" />
-                <span class="truncate">{{ item.counter_name || 'Counter' }}</span>
               </div>
             </div>
 
