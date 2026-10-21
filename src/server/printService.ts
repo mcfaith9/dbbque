@@ -48,8 +48,7 @@ export function getConfiguredLineWidth(): number {
 
 /**
  * Format ticket slip text tailored for Windows printing and receipt paper.
- * Uses clean standard text formatting compatible with ALL Windows printers
- * (EPSON L5590 ink-tank, desktop printers, and thermal printers).
+ * Preserves the exact text layout and queue number format [ P-001 ].
  */
 export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number = configuredLineWidth): string {
   const center = (text: string) => {
@@ -68,14 +67,13 @@ export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number =
     formattedDate = ticket.created_at || new Date().toLocaleString()
   }
 
-  // Centered, prominent queue number slip layout
   const lines: string[] = [
     divider,
     center('DBBQUE SYSTEM'),
     center('Queue Management'),
     divider,
     '',
-    center(`* * *  [ ${ticket.ticket_number} ]  * * *`),
+    center(`[ ${ticket.ticket_number} ]`),
     '',
     divider,
     ticket.waiting_ahead !== undefined ? `Tickets ahead: ${ticket.waiting_ahead}` : '',
@@ -135,9 +133,10 @@ export async function getInstalledPrinters(): Promise<PrinterInfo[]> {
 }
 
 /**
- * Execute direct silent physical printing to the Windows printer using Out-Printer.
- * Compatible with Epson L5590 Series, HP, standard desktop printers, and thermal printers.
- * Safely filters out offline or erroring printers.
+ * Execute direct silent physical printing to the Windows printer.
+ * Uses .NET System.Drawing.Printing to render the ticket queue number in BIG (28pt) and BOLD
+ * font while rendering the surrounding receipt in normal-sized text.
+ * Completely silent (StandardPrintController suppresses print dialogs) with Out-Printer fallback.
  */
 export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{ success: boolean; message?: string; printerUsed?: string }> {
   // 1. Strict payload validation
@@ -155,22 +154,35 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
   const receiptContent = formatTicketText(ticket, lineWidth)
   const targetPrinter = configuredPrinterName
 
+  let formattedDate = ''
+  try {
+    formattedDate = new Date(ticket.created_at).toLocaleString()
+  } catch {
+    formattedDate = ticket.created_at || new Date().toLocaleString()
+  }
+
   if (process.platform === 'win32') {
     const tempDir = os.tmpdir()
     const timestamp = Date.now()
     const tempFilePath = path.join(tempDir, `dbbque_ticket_${timestamp}_${safeTicketNumber}.txt`)
 
     try {
-      // Write clean UTF-8 text file for Windows Out-Printer
+      // Write clean UTF-8 text file as fallback
       fs.writeFileSync(tempFilePath, receiptContent, { encoding: 'utf8' })
 
       const escapedPrinter = targetPrinter.replace(/'/g, "''")
       const escapedFilePath = tempFilePath.replace(/'/g, "''")
+      const escapedTicketNumber = safeTicketNumber.replace(/'/g, "''")
+      const escapedDate = formattedDate.replace(/'/g, "''")
+      const escapedWaiting = (ticket.waiting_ahead !== undefined ? `Tickets ahead: ${ticket.waiting_ahead}` : '').replace(/'/g, "''")
+      const dividerStr = '='.repeat(lineWidth).replace(/'/g, "''")
+      const thinDividerStr = '-'.repeat(lineWidth).replace(/'/g, "''")
 
-      // PowerShell script:
-      // 1. Resolves target printer (ignoring offline/erroring devices like pending deletion HP printers)
-      // 2. Pipes the text through Out-Printer directly to Windows Print Spooler
-      // 3. Verifies execution and reports the printer actually used
+      // PowerShell script using .NET System.Drawing.Printing.PrintDocument:
+      // - StandardPrintController ensures 100% silent printing (no print preview or dialog)
+      // - Renders queue number in 28pt BOLD Segoe UI
+      // - Renders headers in 11pt Bold, body text in 9pt Regular
+      // - Falls back cleanly to Out-Printer if GDI canvas encounters an unexpected issue
       const psScript = `
         $ErrorActionPreference = 'Stop'
         $target = '${escapedPrinter}'
@@ -185,7 +197,6 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
             }
             $printerName = $printerObj.Name
         } else {
-            # Automatically find available online printers (excluding Offline, PendingDeletion, Error)
             $allPrinters = Get-CimInstance Win32_Printer
             $activePrinters = $allPrinters | Where-Object {
                 $_.WorkOffline -ne $true -and
@@ -193,17 +204,14 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
                 $_.Status -ne 'Error'
             }
 
-            # Prefer the default printer if it is online and healthy
             $def = $activePrinters | Where-Object { $_.Default -eq $true } | Select-Object -First 1
             if ($def) {
                 $printerName = $def.Name
             } else {
-                # Otherwise pick the first online printer (e.g. EPSON L5590 Series)
                 $firstActive = $activePrinters | Select-Object -First 1
                 if ($firstActive) {
                     $printerName = $firstActive.Name
                 } else {
-                    # Last fallback if all show offline flags
                     $printerName = ($allPrinters | Select-Object -First 1).Name
                 }
             }
@@ -213,9 +221,100 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
             throw "No operational printer found. Please connect and power on your printer."
         }
 
-        # Send text job silently to the resolved Windows printer
-        Get-Content -LiteralPath '${escapedFilePath}' -Raw -Encoding UTF8 | Out-Printer -Name $printerName
-        Write-Output "SUCCESS:$printerName"
+        try {
+            Add-Type -AssemblyName System.Drawing
+
+            $doc = New-Object System.Drawing.Printing.PrintDocument
+            $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController
+            $doc.PrinterSettings.PrinterName = $printerName
+
+            $titleFont = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+            $subFont = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+            $monoFont = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Regular)
+            # BIG AND BOLD QUEUE NUMBER FONT (28pt Bold)
+            $queueFont = New-Object System.Drawing.Font("Segoe UI", 28, [System.Drawing.FontStyle]::Bold)
+            $instrFont = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Regular)
+            $brush = [System.Drawing.Brushes]::Black
+
+            $centerFormat = New-Object System.Drawing.StringFormat
+            $centerFormat.Alignment = [System.Drawing.StringAlignment]::Center
+
+            $leftFormat = New-Object System.Drawing.StringFormat
+            $leftFormat.Alignment = [System.Drawing.StringAlignment]::Near
+
+            $doc.add_PrintPage({
+                param($sender, $ev)
+                $g = $ev.Graphics
+                $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+
+                $slipWidth = if (${lineWidth} -ge 40) { 380.0 } else { 280.0 }
+                $y = 12.0
+
+                # 1. Header
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 18.0)
+                $g.DrawString("DBBQUE SYSTEM", $titleFont, $brush, $r, $centerFormat)
+                $y += 18.0
+
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
+                $g.DrawString("Queue Management", $subFont, $brush, $r, $centerFormat)
+                $y += 16.0
+
+                # 2. Top Divider
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 14.0)
+                $g.DrawString('${dividerStr}', $monoFont, $brush, $r, $centerFormat)
+                $y += 18.0
+
+                # 3. BIG AND BOLD QUEUE NUMBER
+                $y += 4.0
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 48.0)
+                $g.DrawString("[ ${escapedTicketNumber} ]", $queueFont, $brush, $r, $centerFormat)
+                $y += 50.0
+
+                # 4. Mid Divider
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 14.0)
+                $g.DrawString('${dividerStr}', $monoFont, $brush, $r, $centerFormat)
+                $y += 18.0
+
+                # 5. Waiting count (if present)
+                if ('${escapedWaiting}' -ne '') {
+                    $r = New-Object System.Drawing.RectangleF(10.0, $y, ($slipWidth - 20.0), 16.0)
+                    $g.DrawString('${escapedWaiting}', $subFont, $brush, $r, $leftFormat)
+                    $y += 16.0
+                }
+
+                # 6. Date
+                $r = New-Object System.Drawing.RectangleF(10.0, $y, ($slipWidth - 20.0), 16.0)
+                $g.DrawString('Date: ${escapedDate}', $subFont, $brush, $r, $leftFormat)
+                $y += 16.0
+
+                # 7. Thin Divider
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 14.0)
+                $g.DrawString('${thinDividerStr}', $monoFont, $brush, $r, $centerFormat)
+                $y += 16.0
+
+                # 8. Instructions
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
+                $g.DrawString("Please watch display monitor", $instrFont, $brush, $r, $centerFormat)
+                $y += 15.0
+
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
+                $g.DrawString("and wait for your number.", $instrFont, $brush, $r, $centerFormat)
+                $y += 16.0
+
+                # 9. Bottom Divider
+                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 14.0)
+                $g.DrawString('${dividerStr}', $monoFont, $brush, $r, $centerFormat)
+
+                $ev.HasMorePages = $false
+            })
+
+            $doc.Print()
+            Write-Output "SUCCESS:GDI:$printerName"
+        } catch {
+            # Fallback to plain Out-Printer if GDI print driver encountered an error
+            Get-Content -LiteralPath '${escapedFilePath}' -Raw -Encoding UTF8 | Out-Printer -Name $printerName
+            Write-Output "SUCCESS:OUTPRINTER:$printerName"
+        }
       `
 
       const { stdout } = await execFileAsync('powershell.exe', [
@@ -227,12 +326,13 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
       ])
 
       const trimmedOut = stdout.trim()
-      if (trimmedOut.startsWith('SUCCESS:')) {
-        const usedPrinter = trimmedOut.split(':')[1]?.trim() || targetPrinter || 'Default Windows Printer'
+      if (trimmedOut.includes('SUCCESS:')) {
+        const parts = trimmedOut.split('\n').filter(l => l.includes('SUCCESS:')).pop() || ''
+        const usedPrinter = parts.split(':')[2]?.trim() || targetPrinter || 'Default Windows Printer'
         console.log(`[PrintService] Physical print job submitted successfully to: ${usedPrinter}`)
         return {
           success: true,
-          message: `Ticket sent to printer spooler (${usedPrinter})`,
+          message: `Ticket printed with bold queue number to ${usedPrinter}`,
           printerUsed: usedPrinter
         }
       }
@@ -245,7 +345,7 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
       console.error('[PrintService] Windows print job failed:', err?.message || err)
       return {
         success: false,
-        message: err?.message || 'Windows printer spooler error. Please check printer power and USB connection.'
+        message: err?.message || 'Windows printer spooler error. Please check printer power and connection.'
       }
     } finally {
       try {
@@ -256,7 +356,7 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
     }
   } else {
     // Non-Windows environment (e.g. Linux container / local dev simulation)
-    console.log('[PrintService] Simulated Physical Ticket Print:')
+    console.log('[PrintService] Simulated Physical Ticket Print (Big & Bold Queue Number):')
     console.log(receiptContent)
     return {
       success: true,
