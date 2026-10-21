@@ -166,44 +166,11 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="min-h-screen min-h-dvh bg-zinc-950 text-zinc-100 flex flex-col justify-between selection:bg-zinc-800 selection:text-white overflow-x-hidden">
-    <!-- Top Minimalist Bar -->
-    <header class="border-b border-zinc-850 bg-zinc-950/80 backdrop-blur-md px-6 py-4 sticky top-0 z-10">
-      <div class="max-w-5xl mx-auto flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="size-8 rounded-lg bg-zinc-850 border border-zinc-750 text-zinc-100 flex items-center justify-center font-bold text-sm tracking-tight">
-            Q
-          </div>
-          <div>
-            <h1 class="text-sm font-semibold tracking-tight text-zinc-100">
-              DBBQUE
-            </h1>
-            <p class="text-xs text-zinc-500">
-              Station Terminal &bull; POS
-            </p>
-          </div>
-        </div>
-
-        <!-- Connection indicator -->
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border"
-            :class="isSocketConnected ? 'bg-zinc-900 text-zinc-300 border-zinc-800' : 'bg-zinc-900 text-zinc-500 border-zinc-850'"
-          >
-            <span
-              class="size-1.5 rounded-full"
-              :class="isSocketConnected ? 'bg-emerald-500' : 'bg-zinc-600 animate-pulse'"
-            ></span>
-            {{ isSocketConnected ? 'Online' : 'Connecting' }}
-          </span>
-        </div>
-      </div>
-    </header>
-
     <!-- Main Content Container -->
     <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:py-12 flex flex-col justify-center">
       <!-- Minimalist Header -->
       <div class="mb-8 text-center sm:text-left border-b border-zinc-850 pb-6">
-        <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-100">
+        <h2 class="text-1xl font-semibold tracking-tight text-zinc-100">
           Select Terminal
         </h2>
         <p class="text-sm text-zinc-400 mt-1">
@@ -231,7 +198,7 @@ function handleKeydown(e: KeyboardEvent) {
         >
           <!-- Top Row: Code + Name + Status -->
           <div>
-            <div class="flex items-center justify-between gap-3 mb-4">
+            <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-3">
                 <div class="size-10 rounded-lg bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center justify-center font-bold text-sm tracking-tight group-hover:bg-zinc-750 group-hover:text-white transition-colors">
                   {{ item.code }}
@@ -265,30 +232,6 @@ function handleKeydown(e: KeyboardEvent) {
                 Ready
               </span>
             </div>
-
-            <!-- Active Ticket Details or Ready State -->
-            <div class="min-h-[48px] flex flex-col justify-center">
-              <template v-if="item.counter?.current_ticket">
-                <div class="flex items-baseline justify-between text-xs text-zinc-400">
-                  <span class="flex items-center gap-1">
-                    <Sparkles v-if="item.counter.current_ticket.queue_type === 'priority'" class="size-3 text-zinc-300" />
-                    <span class="capitalize">{{ item.counter.current_ticket.queue_type }}</span>
-                  </span>
-                  <span class="font-mono text-sm font-semibold text-zinc-100">
-                    {{ item.counter.current_ticket.ticket_number }}
-                  </span>
-                </div>
-                <div class="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5">
-                  <Clock class="size-3 text-zinc-600" />
-                  <span>Ticket in service</span>
-                </div>
-              </template>
-              <template v-else>
-                <p class="text-xs text-zinc-500">
-                  Available for customers & orders
-                </p>
-              </template>
-            </div>
           </div>
 
           <!-- Bottom Action Cue -->
@@ -306,7 +249,7 @@ function handleKeydown(e: KeyboardEvent) {
         >
           <!-- Top Row: Icon + Title + Status -->
           <div>
-            <div class="flex items-center justify-between gap-3 mb-4">
+            <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-3">
                 <div class="size-10 rounded-lg bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center justify-center font-bold text-sm tracking-tight group-hover:bg-zinc-750 group-hover:text-white transition-colors">
                   <ShieldCheck class="size-5" />
@@ -325,16 +268,6 @@ function handleKeydown(e: KeyboardEvent) {
                 PIN
               </span>
             </div>
-
-            <!-- Description -->
-            <div class="min-h-[48px] flex flex-col justify-center">
-              <p class="text-xs text-zinc-400 font-medium">
-                Administrative Control Panel
-              </p>
-              <p class="text-[11px] text-zinc-500 mt-0.5">
-                Queue settings, staff accounts, reports & logs
-              </p>
-            </div>
           </div>
 
           <!-- Bottom Action Cue -->
@@ -349,7 +282,7 @@ function handleKeydown(e: KeyboardEvent) {
     <!-- Minimalist Footer -->
     <footer class="border-t border-zinc-850 py-4 px-6 text-center text-xs text-zinc-500">
       <div class="max-w-5xl mx-auto flex items-center justify-between">
-        <span>DBBQUE Queue POS</span>
+        <span>Visayan Electric</span>
         <span>Version 1.0</span>
       </div>
     </footer>
