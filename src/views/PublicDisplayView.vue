@@ -9,15 +9,12 @@ import {
   Maximize2,
   Minimize2,
   Tv,
-  Sparkles,
-  Wifi,
   WifiOff,
   Clock,
   Users,
   CheckCircle2,
   Layers,
-  History,
-  ArrowRight
+  History
 } from '@lucide/vue'
 
 const queue = useQueueStore()

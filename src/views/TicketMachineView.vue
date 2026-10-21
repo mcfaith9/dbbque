@@ -23,12 +23,21 @@ const router = useRouter()
 
 const isGenerating = ref(false)
 const latestTicket = ref<Ticket | null>(null)
+const latestWaitingAhead = ref<number | undefined>(undefined)
 const printStatus = ref<'idle' | 'printing' | 'success' | 'failed'>('idle')
+const printErrorMessage = ref('')
 const errorMessage = ref('')
+const activePrinterName = ref('Detecting printer...')
 
 onMounted(async () => {
   queue.initSocket({ enableSpeech: false })
   await queue.fetchSnapshot().catch(() => {})
+  try {
+    const config = await printerService.getConfig()
+    activePrinterName.value = config.configuredPrinter || 'Windows Default Printer'
+  } catch {
+    activePrinterName.value = 'Windows Default Printer'
+  }
 })
 
 const priorityWaitingCount = computed(() => queue.stats.priorityWaitingCount)
@@ -38,42 +47,64 @@ async function handleGenerate(queueType: 'priority' | 'regular') {
   if (isGenerating.value) return
   isGenerating.value = true
   errorMessage.value = ''
+  printErrorMessage.value = ''
   printStatus.value = 'printing'
 
   try {
+    // 1. Run the existing ticket-generation workflow exactly once
     const ticket = await queue.generateTicket(queueType)
     latestTicket.value = ticket
 
     const waitingAhead = queueType === 'priority'
       ? priorityWaitingCount.value
       : regularWaitingCount.value
+    latestWaitingAhead.value = Math.max(0, waitingAhead - 1)
 
-    // Trigger printing
+    // 2. Automatically dispatch to physical printer without any browser print dialog
     const printRes = await printerService.printTicket({
       ticket_number: ticket.ticket_number,
       queue_type: ticket.queue_type,
       created_at: ticket.created_at,
-      waiting_ahead: Math.max(0, waitingAhead - 1)
+      waiting_ahead: latestWaitingAhead.value
     })
 
-    printStatus.value = printRes.success ? 'success' : 'failed'
+    if (printRes.success) {
+      printStatus.value = 'success'
+    } else {
+      printStatus.value = 'failed'
+      printErrorMessage.value = printRes.message || 'Thermal printer is offline or disconnected.'
+    }
   } catch (err: any) {
+    // Ticket generation failed
     errorMessage.value = err.message || 'Failed to issue ticket'
     printStatus.value = 'idle'
   } finally {
-    isGenerating.value = false
+    // Debounce to prevent rapid double-clicks on touchscreens
+    setTimeout(() => {
+      isGenerating.value = false
+    }, 600)
   }
 }
 
 async function handleReprint() {
-  if (!latestTicket.value) return
+  if (!latestTicket.value || printStatus.value === 'printing') return
   printStatus.value = 'printing'
+  printErrorMessage.value = ''
+
+  // Safe retry: Re-sends the EXACT same ticket record to the printer without generating a new ticket
   const printRes = await printerService.printTicket({
     ticket_number: latestTicket.value.ticket_number,
     queue_type: latestTicket.value.queue_type,
-    created_at: latestTicket.value.created_at
+    created_at: latestTicket.value.created_at,
+    waiting_ahead: latestWaitingAhead.value
   })
-  printStatus.value = printRes.success ? 'success' : 'failed'
+
+  if (printRes.success) {
+    printStatus.value = 'success'
+  } else {
+    printStatus.value = 'failed'
+    printErrorMessage.value = printRes.message || 'Thermal printer retry failed. Please check paper and USB cable.'
+  }
 }
 
 async function handleLogout() {
@@ -220,20 +251,30 @@ async function handleLogout() {
       <!-- Live Ticket Slip Dispensed Banner -->
       <div
         v-if="latestTicket"
-        class="mt-8 max-w-xl mx-auto w-full p-5 rounded-2xl border border-neutral-700 bg-neutral-900 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4"
+        class="mt-8 max-w-xl mx-auto w-full p-5 rounded-2xl border shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 transition-all"
+        :class="printStatus === 'failed' ? 'border-amber-500/50 bg-amber-950/20' : 'border-neutral-700 bg-neutral-900'"
       >
         <div class="flex items-center gap-4 text-left">
-          <div class="size-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-            <CheckCircle2 class="size-6" />
+          <div
+            class="size-12 rounded-xl flex items-center justify-center shrink-0"
+            :class="printStatus === 'failed' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'"
+          >
+            <AlertCircle v-if="printStatus === 'failed'" class="size-6" />
+            <CheckCircle2 v-else class="size-6" />
           </div>
           <div>
-            <div class="text-xs text-neutral-400 flex items-center gap-1">
-              Ticket Dispensed Successfully
+            <div class="text-xs flex items-center gap-1.5" :class="printStatus === 'failed' ? 'text-amber-300' : 'text-neutral-400'">
+              <span v-if="printStatus === 'failed'" class="font-medium">Ticket Queued (Printer Offline)</span>
+              <span v-else-if="printStatus === 'printing'" class="font-medium text-primary">Printing to Thermal Printer...</span>
+              <span v-else>Ticket Dispensed & Printed</span>
               <span class="capitalize font-semibold text-neutral-300">({{ latestTicket.queue_type }})</span>
             </div>
             <div class="text-3xl font-black text-white tracking-wider">
               {{ latestTicket.ticket_number }}
             </div>
+            <p v-if="printStatus === 'failed'" class="text-xs text-amber-400/90 mt-0.5">
+              {{ printErrorMessage }}
+            </p>
           </div>
         </div>
 
@@ -241,11 +282,12 @@ async function handleLogout() {
           <Button
             variant="outline"
             size="sm"
-            class="flex-1 md:flex-none border-neutral-700 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 cursor-pointer"
+            :disabled="printStatus === 'printing'"
+            class="flex-1 md:flex-none border-neutral-700 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 cursor-pointer disabled:opacity-50"
             @click="handleReprint"
           >
-            <Printer class="size-4 mr-1.5" />
-            Print Again
+            <Printer class="size-4 mr-1.5" :class="{ 'animate-pulse text-primary': printStatus === 'printing' }" />
+            {{ printStatus === 'printing' ? 'Printing...' : printStatus === 'failed' ? 'Retry Print' : 'Print Again' }}
           </Button>
         </div>
       </div>
@@ -253,7 +295,7 @@ async function handleLogout() {
 
     <!-- Footer -->
     <footer class="border-t border-neutral-800 py-4 px-6 text-center text-xs text-neutral-500">
-      <span>DBBQUE System &bull; Total waiting: {{ queue.stats.totalWaiting }} &bull; Printer: {{ printerService.getDriverName() }}</span>
+      <span>DBBQUE System &bull; Total waiting: {{ queue.stats.totalWaiting }} &bull; Target Printer: {{ activePrinterName }}</span>
     </footer>
   </div>
 </template>

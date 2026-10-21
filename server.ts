@@ -24,6 +24,13 @@ import {
   AuthRequest,
   AuthUser
 } from './src/server/auth'
+import {
+  printTicketSilently,
+  getInstalledPrinters,
+  getConfiguredPrinter,
+  setConfiguredPrinter,
+  formatTicketText
+} from './src/server/printService'
 
 const PORT = Number(process.env.PORT) || 3000
 const HOST = process.env.HOST || '0.0.0.0'
@@ -194,6 +201,85 @@ async function startServer() {
     } catch (err: any) {
       console.error('Create ticket error:', err)
       res.status(500).json({ error: err.message || 'Failed to generate ticket' })
+    }
+  })
+
+  // --- Automatic Physical Ticket Printing Endpoints ---
+  app.post('/api/print/ticket', async (req, res) => {
+    try {
+      const { ticket_number, queue_type, created_at, waiting_ahead } = req.body
+
+      // 1. Strict input validation
+      if (!ticket_number || typeof ticket_number !== 'string') {
+        return res.status(400).json({ success: false, message: 'Missing or invalid ticket_number' })
+      }
+      if (queue_type !== 'priority' && queue_type !== 'regular') {
+        return res.status(400).json({ success: false, message: 'Invalid queue_type' })
+      }
+
+      // 2. Dispatch silent print to Windows printer spooler
+      const result = await printTicketSilently({
+        ticket_number: ticket_number.trim(),
+        queue_type,
+        created_at: String(created_at || new Date().toISOString()),
+        waiting_ahead: typeof waiting_ahead === 'number' ? waiting_ahead : undefined
+      })
+
+      if (result.success) {
+        return res.json(result)
+      } else {
+        return res.status(502).json(result)
+      }
+    } catch (err: any) {
+      console.error('[dbbque] Print endpoint error:', err)
+      return res.status(500).json({ success: false, message: err?.message || 'Internal printing service error' })
+    }
+  })
+
+  app.get('/api/print/config', (_req, res) => {
+    res.json({
+      configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer',
+      isWindows: process.platform === 'win32'
+    })
+  })
+
+  app.get('/api/print/printers', async (_req, res) => {
+    try {
+      const printers = await getInstalledPrinters()
+      res.json({
+        printers,
+        configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer',
+        isWindows: process.platform === 'win32'
+      })
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to list printers' })
+    }
+  })
+
+  app.post('/api/print/config', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+    try {
+      const { printer_name } = req.body
+      setConfiguredPrinter(typeof printer_name === 'string' ? printer_name : '')
+      res.json({
+        message: 'Printer configuration updated',
+        configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer'
+      })
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to update printer config' })
+    }
+  })
+
+  app.post('/api/print/test', authMiddleware, requireRole('admin'), async (_req: AuthRequest, res) => {
+    try {
+      const result = await printTicketSilently({
+        ticket_number: 'TEST-001',
+        queue_type: 'priority',
+        created_at: new Date().toISOString(),
+        waiting_ahead: 0
+      })
+      res.json(result)
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || 'Test print failed' })
     }
   })
 

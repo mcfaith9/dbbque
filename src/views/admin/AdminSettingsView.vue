@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { CheckCircle2, RotateCcw, AlertTriangle, Scale, Hash } from '@lucide/vue'
+import { CheckCircle2, RotateCcw, AlertTriangle, Scale, Hash, Printer } from '@lucide/vue'
 
 const queue = useQueueStore()
 const isLoading = ref(false)
@@ -29,11 +29,24 @@ const regularRatio = ref(1)
 const prefixPriority = ref('P')
 const prefixRegular = ref('R')
 
+const selectedPrinter = ref('')
+const availablePrinters = ref<{ name: string; isDefault: boolean }[]>([])
+const isTestingPrint = ref(false)
 const isResetDialogOpen = ref(false)
 
 onMounted(async () => {
-  await loadSettings()
+  await Promise.all([loadSettings(), loadPrinterConfig()])
 })
+
+async function loadPrinterConfig() {
+  try {
+    const res = await apiRequest<{ printers: { name: string; isDefault: boolean }[]; configuredPrinter: string }>('/api/print/printers')
+    availablePrinters.value = res.printers || []
+    selectedPrinter.value = res.configuredPrinter === 'Default Windows Printer' ? '' : (res.configuredPrinter || '')
+  } catch {
+    // ignore
+  }
+}
 
 async function loadSettings() {
   isLoading.value = true
@@ -45,6 +58,53 @@ async function loadSettings() {
     prefixRegular.value = res.settings.prefix_regular
   } finally {
     isLoading.value = false
+  }
+}
+
+async function handleSavePrinter() {
+  try {
+    const res = await apiRequest<{ message: string; configuredPrinter: string }>('/api/print/config', {
+      method: 'POST',
+      body: JSON.stringify({ printer_name: selectedPrinter.value.trim() })
+    })
+    notification.value = {
+      type: 'success',
+      text: `Printer configured: ${res.configuredPrinter}`
+    }
+  } catch (err: any) {
+    notification.value = { type: 'error', text: err.message || 'Failed to update printer configuration' }
+  } finally {
+    setTimeout(() => {
+      notification.value = null
+    }, 4000)
+  }
+}
+
+async function handleTestPrint() {
+  if (isTestingPrint.value) return
+  isTestingPrint.value = true
+  try {
+    const res = await apiRequest<{ success: boolean; message?: string; printerUsed?: string }>('/api/print/test', {
+      method: 'POST'
+    })
+    if (res.success) {
+      notification.value = {
+        type: 'success',
+        text: `Test ticket sent successfully to ${res.printerUsed || 'printer spooler'}`
+      }
+    } else {
+      notification.value = {
+        type: 'error',
+        text: res.message || 'Printer failed to print test ticket'
+      }
+    }
+  } catch (err: any) {
+    notification.value = { type: 'error', text: err.message || 'Failed to dispatch test print' }
+  } finally {
+    isTestingPrint.value = false
+    setTimeout(() => {
+      notification.value = null
+    }, 5000)
   }
 }
 
@@ -163,11 +223,80 @@ async function handleResetQueue() {
       </div>
     </div>
 
-    <!-- Save Settings Button -->
+    <!-- Save Policy Settings Button -->
     <div class="flex justify-end">
       <Button variant="default" class="cursor-pointer" @click="handleSaveSettings">
         Save Policy Settings
       </Button>
+    </div>
+
+    <!-- Thermal Printer Configuration -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-2xs space-y-4">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <Printer class="size-5 text-primary" />
+          <div>
+            <h3 class="font-bold text-sm text-foreground">Thermal Ticket Printer</h3>
+            <p class="text-xs text-muted-foreground">
+              Configure USB thermal receipt printer for automatic silent ticket dispensing.
+            </p>
+          </div>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isTestingPrint"
+          class="cursor-pointer"
+          @click="handleTestPrint"
+        >
+          <Printer class="size-3.5 mr-1.5" :class="{ 'animate-pulse text-primary': isTestingPrint }" />
+          {{ isTestingPrint ? 'Testing...' : 'Send Test Ticket' }}
+        </Button>
+      </div>
+
+      <div class="space-y-4 pt-2">
+        <Field>
+          <FieldLabel for="printer-name">Target Printer Name</FieldLabel>
+          <Input
+            id="printer-name"
+            v-model="selectedPrinter"
+            placeholder="Leave empty to use Windows Default Printer (e.g. POS-58, POS-80)"
+          />
+          <FieldDescription>
+            Enter the exact printer name from Windows "Printers & Scanners", or leave empty to use the system default printer.
+          </FieldDescription>
+        </Field>
+
+        <div v-if="availablePrinters.length > 0" class="text-xs space-y-1.5">
+          <span class="text-muted-foreground font-medium">Detected Printers on this Machine:</span>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button
+              v-for="p in availablePrinters"
+              :key="p.name"
+              type="button"
+              class="px-2.5 py-1 rounded-md border border-border bg-muted/40 hover:bg-muted text-xs cursor-pointer transition-colors"
+              :class="{ 'border-primary text-primary font-semibold': selectedPrinter === p.name }"
+              @click="selectedPrinter = p.name"
+            >
+              {{ p.name }} <span v-if="p.isDefault" class="text-[10px] text-primary">(Default)</span>
+            </button>
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-md border border-border bg-muted/40 hover:bg-muted text-xs cursor-pointer transition-colors text-muted-foreground"
+              @click="selectedPrinter = ''"
+            >
+              Use System Default
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <Button variant="secondary" size="sm" class="cursor-pointer" @click="handleSavePrinter">
+            Save Printer Setting
+          </Button>
+        </div>
+      </div>
     </div>
 
     <!-- Danger Zone: Reset Daily Sequences -->
