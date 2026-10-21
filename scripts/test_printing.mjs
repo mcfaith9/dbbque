@@ -83,6 +83,15 @@ async function runPrintTests() {
   console.assert(testPrint.status === 200, 'Admin test print failed')
   console.log('✓ 7. Admin test print endpoint passed:', testPrint.data)
 
+  // 8. Test Configurable Printer Width (58mm vs 80mm)
+  const set80mm = await post('/api/print/config', { line_width: 80 }, adminToken)
+  console.assert(set80mm.status === 200 && set80mm.data.lineWidth === 48, 'Setting 80mm should configure 48 columns')
+  console.log('✓ 8a. Configured 80mm thermal width (48 columns)')
+
+  const set58mm = await post('/api/print/config', { line_width: 58 }, adminToken)
+  console.assert(set58mm.status === 200 && set58mm.data.lineWidth === 32, 'Setting 58mm should configure 32 columns')
+  console.log('✓ 8b. Configured 58mm thermal width (32 columns)')
+
   console.log('\nALL THERMAL PRINTING TESTS PASSED! 🖨️')
 }
 

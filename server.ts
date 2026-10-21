@@ -29,6 +29,8 @@ import {
   getInstalledPrinters,
   getConfiguredPrinter,
   setConfiguredPrinter,
+  getConfiguredLineWidth,
+  setConfiguredLineWidth,
   formatTicketText
 } from './src/server/printService'
 
@@ -239,6 +241,7 @@ async function startServer() {
   app.get('/api/print/config', (_req, res) => {
     res.json({
       configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer',
+      lineWidth: getConfiguredLineWidth(),
       isWindows: process.platform === 'win32'
     })
   })
@@ -249,6 +252,7 @@ async function startServer() {
       res.json({
         printers,
         configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer',
+        lineWidth: getConfiguredLineWidth(),
         isWindows: process.platform === 'win32'
       })
     } catch (err: any) {
@@ -258,11 +262,17 @@ async function startServer() {
 
   app.post('/api/print/config', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
     try {
-      const { printer_name } = req.body
-      setConfiguredPrinter(typeof printer_name === 'string' ? printer_name : '')
+      const { printer_name, line_width } = req.body
+      if (printer_name !== undefined) {
+        setConfiguredPrinter(typeof printer_name === 'string' ? printer_name : '')
+      }
+      if (typeof line_width === 'number') {
+        setConfiguredLineWidth(line_width)
+      }
       res.json({
         message: 'Printer configuration updated',
-        configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer'
+        configuredPrinter: getConfiguredPrinter() || 'Default Windows Printer',
+        lineWidth: getConfiguredLineWidth()
       })
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to update printer config' })
