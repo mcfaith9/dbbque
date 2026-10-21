@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),
-    meta: { guestOnly: true }
+    meta: { isHub: true }
   },
   {
     path: '/signup',
@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
     path: '/ticket',
     name: 'TicketMachine',
     component: () => import('@/views/TicketMachineView.vue'),
-    meta: { requiresAuth: true, roles: ['ticket', 'admin'] }
+    meta: { isKiosk: true }
   },
   {
     path: '/counter',
@@ -98,7 +98,17 @@ router.beforeEach(async (to, _from, next) => {
     await auth.fetchCurrentUser()
   }
 
-  // Guest-only routes (e.g. login/signup)
+  // Auto-init kiosk session if accessing /ticket directly
+  if (to.path === '/ticket' && !auth.isAuthenticated) {
+    try {
+      await auth.kioskLogin()
+      return next()
+    } catch {
+      // continue
+    }
+  }
+
+  // Guest-only routes (e.g. signup)
   if (to.meta.guestOnly && auth.isAuthenticated) {
     return next(auth.getDefaultRoute())
   }

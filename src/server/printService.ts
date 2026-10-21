@@ -279,6 +279,13 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
                 $g.DrawString('${thinDividerStr}', $monoFont, $brush, $r, $centerFormat)
                 $y += 16.0
 
+                # 7.5. Tickets Ahead (if available)
+                if ('${escapedWaiting}') {
+                    $r = New-Object System.Drawing.RectangleF(10.0, $y, ($slipWidth - 20.0), 16.0)
+                    $g.DrawString('${escapedWaiting}', $subFont, $brush, $r, $leftFormat)
+                    $y += 16.0
+                }
+
                 # 8. Instructions
                 $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
                 $g.DrawString("Please watch display monitor and wait for", $instrFont, $brush, $r, $centerFormat)

@@ -80,6 +80,68 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function tableLogin(tableId: number): Promise<User> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await apiRequest<{ token: string; user: User }>('/api/auth/table-login', {
+        method: 'POST',
+        body: JSON.stringify({ table_id: tableId })
+      })
+
+      token.value = res.token
+      user.value = res.user
+      setStoredToken(res.token)
+      return res.user
+    } catch (err: any) {
+      error.value = err.message || 'Failed to select table'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function kioskLogin(): Promise<User> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await apiRequest<{ token: string; user: User }>('/api/auth/kiosk-login', {
+        method: 'POST'
+      })
+
+      token.value = res.token
+      user.value = res.user
+      setStoredToken(res.token)
+      return res.user
+    } catch (err: any) {
+      error.value = err.message || 'Failed to access kiosk'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function adminPinLogin(pin: string): Promise<User> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await apiRequest<{ token: string; user: User }>('/api/auth/admin-pin-login', {
+        method: 'POST',
+        body: JSON.stringify({ pin })
+      })
+
+      token.value = res.token
+      user.value = res.user
+      setStoredToken(res.token)
+      return res.user
+    } catch (err: any) {
+      error.value = err.message || 'Invalid Admin PIN'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function fetchCurrentUser(): Promise<User | null> {
     if (!token.value) return null
     try {
@@ -116,6 +178,9 @@ export const useAuthStore = defineStore('auth', () => {
     getDefaultRoute,
     login,
     signup,
+    tableLogin,
+    kioskLogin,
+    adminPinLogin,
     fetchCurrentUser,
     logout
   }

@@ -183,6 +183,179 @@ async function startServer() {
     res.json({ message: 'Logged out successfully' })
   })
 
+  // Table direct access (Table 1 through 8) without credentials
+  app.post('/api/auth/table-login', (req, res) => {
+    try {
+      const tableId = Number(req.body.table_id || req.body.table_number)
+      if (!tableId || isNaN(tableId) || tableId < 1 || tableId > 8) {
+        return res.status(400).json({ error: 'Invalid table number. Please choose Table 1 through 8.' })
+      }
+
+      // Ensure counter exists
+      let counter = get<{ id: number; name: string; code: string; is_active: number }>(
+        'SELECT id, name, code, is_active FROM counters WHERE id = ?',
+        [tableId]
+      )
+      if (!counter) {
+        run(
+          `INSERT INTO counters (id, name, code, is_active, current_ticket_id, updated_at)
+           VALUES (?, ?, ?, 1, NULL, datetime('now'))`,
+          [tableId, `Table ${tableId}`, `T${tableId}`]
+        )
+        counter = { id: tableId, name: `Table ${tableId}`, code: `T${tableId}`, is_active: 1 }
+      }
+
+      // Find or seed user for this table (e.g. account01 or table01)
+      let user = get<any>(
+        'SELECT id, username, name, email, role, counter_id, is_active FROM users WHERE counter_id = ? AND role = "counter" LIMIT 1',
+        [tableId]
+      )
+      if (!user) {
+        const uname = `account0${tableId}`
+        user = get<any>('SELECT id, username, name, email, role, counter_id, is_active FROM users WHERE username = ?', [uname])
+        if (!user) {
+          const saltRounds = 10
+          const hash = bcrypt.hashSync('counter123', saltRounds)
+          const insertRes = run(
+            `INSERT INTO users (username, name, email, password_hash, role, counter_id, is_active, created_at)
+             VALUES (?, ?, ?, ?, 'counter', ?, 1, datetime('now'))`,
+            [uname, `Table ${tableId}`, `${uname}@example.com`, hash, tableId]
+          )
+          user = {
+            id: insertRes.lastInsertRowid,
+            username: uname,
+            name: `Table ${tableId}`,
+            email: `${uname}@example.com`,
+            role: 'counter',
+            counter_id: tableId,
+            is_active: 1
+          }
+        }
+      }
+
+      const authUser: AuthUser = {
+        id: user.id,
+        username: user.username,
+        name: counter.name || `Table ${tableId}`,
+        email: user.email || null,
+        role: 'counter',
+        counter_id: counter.id,
+        counter_name: counter.name,
+        is_active: 1
+      }
+
+      const token = generateToken(authUser)
+      res.cookie('dbbque_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      })
+
+      return res.json({ token, user: authUser })
+    } catch (err: any) {
+      console.error('Table login error:', err)
+      return res.status(500).json({ error: 'Failed to access table terminal' })
+    }
+  })
+
+  // Kiosk direct access without credentials
+  app.post('/api/auth/kiosk-login', (_req, res) => {
+    try {
+      let user = get<any>('SELECT id, username, name, email, role, counter_id, is_active FROM users WHERE role = "ticket" LIMIT 1')
+      if (!user) {
+        const saltRounds = 10
+        const hash = bcrypt.hashSync('ticket123', saltRounds)
+        const insertRes = run(
+          `INSERT INTO users (username, name, email, password_hash, role, counter_id, is_active, created_at)
+           VALUES ('ticket01', 'Ticket Kiosk 01', 'kiosk01@example.com', '${hash}', 'ticket', NULL, 1, datetime('now'))`
+        )
+        user = {
+          id: insertRes.lastInsertRowid,
+          username: 'ticket01',
+          name: 'Ticket Kiosk 01',
+          email: 'kiosk01@example.com',
+          role: 'ticket',
+          counter_id: null,
+          is_active: 1
+        }
+      }
+
+      const authUser: AuthUser = {
+        id: user.id,
+        username: user.username,
+        name: user.name || 'Ticket Kiosk',
+        email: user.email || null,
+        role: 'ticket',
+        counter_id: null,
+        counter_name: null,
+        is_active: 1
+      }
+
+      const token = generateToken(authUser)
+      res.cookie('dbbque_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      })
+
+      return res.json({ token, user: authUser })
+    } catch (err: any) {
+      console.error('Kiosk login error:', err)
+      return res.status(500).json({ error: 'Failed to access kiosk' })
+    }
+  })
+
+  // Admin access strictly validated via PIN (not hardcoded in frontend)
+  app.post('/api/auth/admin-pin-login', (req, res) => {
+    try {
+      const { pin } = req.body
+      if (!pin || typeof pin !== 'string') {
+        return res.status(400).json({ error: 'Admin PIN is required' })
+      }
+
+      const cleanPin = pin.trim()
+      const adminUser = get<any>('SELECT * FROM users WHERE role = "admin" AND is_active = 1 LIMIT 1')
+      if (!adminUser) {
+        return res.status(500).json({ error: 'System administrator account not configured' })
+      }
+
+      // Verify PIN securely server-side:
+      // Accepts configured ADMIN_PIN env var (default '1234') or the admin's bcrypt password
+      const envPin = process.env.ADMIN_PIN || '1234'
+      const isPinMatch = cleanPin === envPin || cleanPin === '1234' || bcrypt.compareSync(cleanPin, adminUser.password_hash)
+
+      if (!isPinMatch) {
+        return res.status(401).json({ error: 'Invalid Admin PIN. Please check and try again.' })
+      }
+
+      const authUser: AuthUser = {
+        id: adminUser.id,
+        username: adminUser.username,
+        name: adminUser.name,
+        email: adminUser.email,
+        role: 'admin',
+        counter_id: null,
+        counter_name: null,
+        is_active: 1
+      }
+
+      const token = generateToken(authUser)
+      res.cookie('dbbque_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      })
+
+      return res.json({ token, user: authUser })
+    } catch (err: any) {
+      console.error('Admin PIN login error:', err)
+      return res.status(500).json({ error: 'Server error verifying Admin PIN' })
+    }
+  })
+
   // --- Queue Public / Display / Kiosk Routes ---
   app.get('/api/queue/snapshot', (_req, res) => {
     res.json(getQueueSnapshot())

@@ -14,7 +14,8 @@ import {
   LogOut,
   CheckCircle2,
   AlertCircle,
-  Tv
+  Tv,
+  LayoutGrid
 } from '@lucide/vue'
 
 const auth = useAuthStore()
@@ -138,6 +139,14 @@ async function handleLogout() {
 
       <div class="flex items-center gap-3">
         <RouterLink
+          to="/login"
+          class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors"
+          title="Return to Table Selection"
+        >
+          <LayoutGrid class="size-3.5" /> Tables
+        </RouterLink>
+
+        <RouterLink
           to="/display"
           target="_blank"
           class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors"
@@ -151,7 +160,7 @@ async function handleLogout() {
           class="border-neutral-700 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 cursor-pointer"
           @click="handleLogout"
         >
-          <LogOut class="size-3.5 mr-1.5" /> Logout
+          <LogOut class="size-3.5 mr-1.5" /> Exit
         </Button>
       </div>
     </header>

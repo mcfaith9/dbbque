@@ -17,7 +17,8 @@ import {
   Clock,
   Tv,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  LayoutGrid
 } from '@lucide/vue'
 
 const auth = useAuthStore()
@@ -40,8 +41,13 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
 })
 
-// Current counter assigned to this user
+// Current counter assigned to this user (prioritizes query param if provided, e.g. /counter?table=3)
 const currentCounter = computed<CounterInfo | undefined>(() => {
+  const tableParam = Number(router.currentRoute.value.query.table || router.currentRoute.value.query.counter)
+  if (tableParam) {
+    const found = queue.counters.find(c => c.id === tableParam)
+    if (found) return found
+  }
   if (!auth.user?.counter_id) {
     // If admin or unassigned, default to counter 1 or first available
     return queue.counters[0]
@@ -184,6 +190,14 @@ async function handleLogout() {
 
       <div class="flex items-center gap-3">
         <RouterLink
+          to="/login"
+          class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-accent text-foreground transition-colors"
+          title="Return to Table Selection"
+        >
+          <LayoutGrid class="size-3.5" /> Tables
+        </RouterLink>
+
+        <RouterLink
           to="/display"
           target="_blank"
           class="hidden sm:inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-accent text-foreground transition-colors"
@@ -192,7 +206,7 @@ async function handleLogout() {
         </RouterLink>
 
         <Button variant="outline" size="sm" class="cursor-pointer" @click="handleLogout">
-          <LogOut class="size-3.5 mr-1.5" /> Logout
+          <LogOut class="size-3.5 mr-1.5" /> Exit
         </Button>
       </div>
     </header>
