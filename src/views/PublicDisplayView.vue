@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useQueueStore, type Ticket } from '@/stores/queue'
 import { isSocketConnected } from '@/services/socket'
-import { speechService, isAudioUnlocked, isVoiceEnabled } from '@/services/speech'
+import { speechService, isVoiceEnabled } from '@/services/speech'
 import {
   Volume2,
   VolumeX,
@@ -20,6 +20,54 @@ import {
 const queue = useQueueStore()
 const isFullscreen = ref(false)
 const currentTime = ref(new Date().toLocaleTimeString())
+const isMuted = ref(false)
+const musicStarted = ref(false)
+const videoIframeRef = ref<HTMLIFrameElement | null>(null)
+
+function postToPlayer(func: string, args: any[] = []) {
+  if (videoIframeRef.value?.contentWindow) {
+    videoIframeRef.value.contentWindow.postMessage(
+      JSON.stringify({ event: 'command', func, args }),
+      '*'
+    )
+  }
+}
+
+function enableMusic() {
+  musicStarted.value = true
+  isMuted.value = false
+  isVoiceEnabled.value = true
+  speechService.unlockAudio()
+  postToPlayer('unMute')
+  postToPlayer('setVolume', [100])
+  postToPlayer('playVideo')
+}
+
+function toggleSound() {
+  speechService.unlockAudio()
+  if (!musicStarted.value && isMuted.value) {
+    enableMusic()
+    return
+  }
+  isMuted.value = !isMuted.value
+  isVoiceEnabled.value = !isMuted.value
+  if (isMuted.value) {
+    postToPlayer('mute')
+  } else {
+    musicStarted.value = true
+    postToPlayer('unMute')
+    postToPlayer('setVolume', [100])
+    postToPlayer('playVideo')
+  }
+}
+
+function onIframeLoad() {
+  if (!isMuted.value) {
+    postToPlayer('unMute')
+    postToPlayer('setVolume', [100])
+    postToPlayer('playVideo')
+  }
+}
 
 onMounted(() => {
   queue.initSocket({ enableSpeech: true })
@@ -28,6 +76,12 @@ onMounted(() => {
   setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
   }, 1000)
+
+  // Default sound enabled
+  isVoiceEnabled.value = true
+  try {
+    speechService.unlockAudio()
+  } catch {}
 })
 
 // Current most prominent calling ticket for the hero section
@@ -107,10 +161,6 @@ function toggleFullscreen() {
   }
 }
 
-function unlockAndToggleSound() {
-  speechService.unlockAudio()
-  isVoiceEnabled.value = !isVoiceEnabled.value
-}
 </script>
 
 <template>
@@ -126,21 +176,34 @@ function unlockAndToggleSound() {
           <!-- 1. Hero: Most Prominent Ticket Being Called (7 cols) -->
           <div class="lg:col-span-7 flex flex-col justify-between p-6 md:p-8 relative overflow-hidden min-h-0">
             <!-- Hero Header -->
-            <!-- Controls: Audio Unlock / Fullscreen / Clock / Queue Count -->
-            <div class="absolute top-4 left-4 z-50 flex items-center gap-1">
-              <!-- Sound Toggle -->
+            <!-- Controls: Audio / Music / Fullscreen / Clock / Queue Count -->
+            <div class="absolute top-4 left-4 z-50 flex items-center gap-1.5">
+              <!-- Sound Toggle: initial state matches unmuted player state (!isMuted === true) -->
               <button
                 type="button"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer"
-                @click="unlockAndToggleSound"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer border-neutral-700 bg-neutral-900/80 text-white hover:bg-neutral-800"
+                :title="!isMuted ? 'Mute Sound' : 'Unmute Sound'"
+                @click="toggleSound"
               >
-                <component :is="isVoiceEnabled && isAudioUnlocked ? Volume2 : VolumeX" class="size-4" />
+                <component :is="!isMuted ? Volume2 : VolumeX" class="size-4" />
+              </button>
+
+              <!-- Enable Music button if browser blocks unmuted autoplay -->
+              <button
+                v-if="!musicStarted"
+                type="button"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
+                title="Enable Music"
+                @click="enableMusic"
+              >
+                <Volume2 class="size-3.5" />
+                <span>Enable Music</span>
               </button>
 
               <!-- Fullscreen Toggle -->
               <button
                 type="button"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer border-neutral-700 bg-neutral-900/80 text-white hover:bg-neutral-800"
                 title="Toggle Fullscreen"
                 @click="toggleFullscreen"
               >
@@ -203,15 +266,16 @@ function unlockAndToggleSound() {
           >
             <div class="flex-1 min-h-0 overflow-hidden rounded-xl bg-black border border-neutral-800">
               <iframe
+                ref="videoIframeRef"
                 class="w-full h-full pointer-events-none select-none"
-                src="https://www.youtube.com/embed/QsK8n1Ndv-Y?autoplay=1&mute=1&controls=0&loop=1&playlist=QsK8n1Ndv-Y&playsinline=1"
+                src="https://www.youtube.com/embed/QsK8n1Ndv-Y?autoplay=1&mute=0&controls=0&loop=1&playlist=QsK8n1Ndv-Y&playsinline=1&enablejsapi=1"
                 title="DBBQUE Promotional Video"
                 frameborder="0"
                 allow="autoplay; encrypted-media; picture-in-picture"
                 referrerpolicy="strict-origin-when-cross-origin"
                 tabindex="-1"
+                @load="onIframeLoad"
               ></iframe>
-              <!-- https://www.youtube.com/embed/QsK8n1Ndv-Y?autoplay=1&mute=1&controls=0&loop=1&playlist=QsK8n1Ndv-Y&playsinline=1 -->
             </div>
           </div>
         </div>

@@ -147,7 +147,7 @@ async function handleLogout() {
           <button
             type="button"
             :disabled="isGenerating"
-            class="group relative flex flex-col justify-between p-8 md:p-10 rounded-3xl border-2 border-amber-500/40 bg-gradient-to-b from-neutral-900 to-neutral-900/90 hover:border-amber-400 hover:shadow-2xl hover:shadow-amber-500/10 active:scale-[0.98] transition-all text-left cursor-pointer disabled:opacity-50"
+            class="group relative flex flex-col justify-between p-8 md:p-10 rounded-3xl border-2 border-amber-500/40 bg-neutral-900 bg-gradient-to-b from-neutral-900 to-neutral-950 hover:border-amber-400 hover:shadow-2xl hover:shadow-amber-500/10 active:scale-[0.98] transition-all text-left cursor-pointer disabled:cursor-wait disabled:opacity-100 disabled:pointer-events-none"
             @click="handleGenerate('priority')"
           >
             <div class="flex items-start justify-between">
@@ -174,7 +174,7 @@ async function handleLogout() {
                 Waiting in lane: <strong class="text-white text-sm">{{ priorityWaitingCount }}</strong>
               </span>
               <span class="font-medium text-amber-400 group-hover:translate-x-1 transition-transform">
-                Press to Print Slip &rarr;
+                {{ isGenerating ? 'Printing Ticket...' : 'Press to Print Slip &rarr;' }}
               </span>
             </div>
           </button>
@@ -183,7 +183,7 @@ async function handleLogout() {
           <button
             type="button"
             :disabled="isGenerating"
-            class="group relative flex flex-col justify-between p-8 md:p-10 rounded-3xl border-2 border-neutral-700 bg-gradient-to-b from-neutral-900 to-neutral-900/90 hover:border-primary hover:shadow-2xl hover:shadow-primary/10 active:scale-[0.98] transition-all text-left cursor-pointer disabled:opacity-50"
+            class="group relative flex flex-col justify-between p-8 md:p-10 rounded-3xl border-2 border-neutral-700 bg-neutral-900 bg-gradient-to-b from-neutral-900 to-neutral-950 hover:border-primary hover:shadow-2xl hover:shadow-primary/10 active:scale-[0.98] transition-all text-left cursor-pointer disabled:cursor-wait disabled:opacity-100 disabled:pointer-events-none"
             @click="handleGenerate('regular')"
           >
             <div class="flex items-start justify-between">
@@ -210,7 +210,7 @@ async function handleLogout() {
                 Waiting in lane: <strong class="text-white text-sm">{{ regularWaitingCount }}</strong>
               </span>
               <span class="font-medium text-primary group-hover:translate-x-1 transition-transform">
-                Press to Print Slip &rarr;
+                {{ isGenerating ? 'Printing Ticket...' : 'Press to Print Slip &rarr;' }}
               </span>
             </div>
           </button>
@@ -251,7 +251,7 @@ async function handleLogout() {
               variant="outline"
               size="sm"
               :disabled="printStatus === 'printing'"
-              class="flex-1 md:flex-none border-neutral-700 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 cursor-pointer disabled:opacity-50"
+              class="flex-1 md:flex-none border-neutral-700 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 cursor-pointer disabled:opacity-100 disabled:cursor-wait"
               @click="handleReprint"
             >
               <Printer class="size-4 mr-1.5" :class="{ 'animate-pulse text-primary': printStatus === 'printing' }" />
