@@ -69,18 +69,16 @@ export function formatTicketText(ticket: TicketPrintPayload, lineWidth: number =
 
   const lines: string[] = [
     divider,
-    center('DBBQUE SYSTEM'),
-    center('Queue Management'),
+    center('VISAYAN ELECTRIC'),
     divider,
     '',
     center(`[ ${ticket.ticket_number} ]`),
     '',
     divider,
-    ticket.waiting_ahead !== undefined ? `Tickets ahead: ${ticket.waiting_ahead}` : '',
     `Date: ${formattedDate}`,
     thinDivider,
     center('Please watch display monitor'),
-    center('and wait for your number.'),
+    center('and wait for your number. Thank You :)'),
     divider,
     '',
     '',
@@ -252,12 +250,8 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
 
                 # 1. Header
                 $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 18.0)
-                $g.DrawString("DBBQUE SYSTEM", $titleFont, $brush, $r, $centerFormat)
+                $g.DrawString("VISAYAN ELECTRIC", $titleFont, $brush, $r, $centerFormat)
                 $y += 18.0
-
-                $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
-                $g.DrawString("Queue Management", $subFont, $brush, $r, $centerFormat)
-                $y += 16.0
 
                 # 2. Top Divider
                 $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 14.0)
@@ -275,13 +269,6 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
                 $g.DrawString('${dividerStr}', $monoFont, $brush, $r, $centerFormat)
                 $y += 18.0
 
-                # 5. Waiting count (if present)
-                if ('${escapedWaiting}' -ne '') {
-                    $r = New-Object System.Drawing.RectangleF(10.0, $y, ($slipWidth - 20.0), 16.0)
-                    $g.DrawString('${escapedWaiting}', $subFont, $brush, $r, $leftFormat)
-                    $y += 16.0
-                }
-
                 # 6. Date
                 $r = New-Object System.Drawing.RectangleF(10.0, $y, ($slipWidth - 20.0), 16.0)
                 $g.DrawString('Date: ${escapedDate}', $subFont, $brush, $r, $leftFormat)
@@ -294,11 +281,11 @@ export async function printTicketSilently(ticket: TicketPrintPayload): Promise<{
 
                 # 8. Instructions
                 $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
-                $g.DrawString("Please watch display monitor", $instrFont, $brush, $r, $centerFormat)
+                $g.DrawString("Please watch display monitor and wait for", $instrFont, $brush, $r, $centerFormat)
                 $y += 15.0
 
                 $r = New-Object System.Drawing.RectangleF(0, $y, $slipWidth, 15.0)
-                $g.DrawString("and wait for your number.", $instrFont, $brush, $r, $centerFormat)
+                $g.DrawString("your number. Thank You :)", $instrFont, $brush, $r, $centerFormat)
                 $y += 16.0
 
                 # 9. Bottom Divider
